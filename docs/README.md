@@ -51,16 +51,17 @@
 ## 当前项目的完整入口
 
 ```
-README.md                          ← 总入口，含一键回归命令
+README.md                          ← 总入口，含进度表与一键回归命令
 ├── docs/架构与接口契约.md          ← 先读这个（做什么、为什么）
 ├── docs/硬件采购清单.md            ← 买什么、怎么接
 ├── docs/GUI复现指南_手势识别系统.md ← 怎么点出来
 │
-├── src_hls/README.md              ← HLS 处理链（含语义契约、cosim 排查）
-├── rtl/README.md                  ← 手写 Verilog
+├── src_hls/README.md              ← HLS 处理链（语义契约 + cosim 排查）
+├── rtl/README.md                  ← 手写 Verilog（含验证盲区说明）
 ├── sw/README.md                   ← PS 侧驱动
 ├── host/README.md                 ← PC 侧工具（golden / 对拍 / overlay）
-└── vivado/README.md               ← BD 脚本（含 12 个踩坑记录）
+├── vivado/README.md               ← BD 脚本（含 15 个踩坑记录）
+└── legacy/README.md               ← 原 Sobel 参照工程（为什么在这）
 ```
 
 **推荐阅读顺序**：

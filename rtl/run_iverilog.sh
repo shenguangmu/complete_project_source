@@ -13,7 +13,7 @@
 #      cd rtl && bash run_iverilog.sh    # 或在 rtl 目录下
 #
 #  ⚠ 判定标准是日志里的 "*** TB PASSED ***"。
-#    "finished" 不算数 —— 见 skill 的 09-pitfalls.md。
+#    "finished" 不算数 —— 必须有明确的 PASS/FAIL 才算验证过。
 # =====================================================================
 
 set -u

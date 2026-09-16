@@ -236,7 +236,7 @@ gaussian 9,821、sobel 9,822、thresh 18,443、morph 19,066。
 | 环节 | 位置 | 状态 |
 |---|---|---|
 | IP 导出 | `user:hls:gesture_preproc:1.0` | ✅ |
-| 进 BD | `vivado/bd_video.tcl`（`gesture_preproc_0` + `dma_in` + `dma_out`） | ✅ 综合通过 |
+| 进 BD | `vivado/bd_video.tcl`（`gesture_preproc_0` + `dma_in` + `dma_out`） | ✅ 综合 + 实现 + 比特流 |
 | PS 侧驱动 | `sw/preproc_driver.c` | ✅ 主机自检 24/24 |
 
 **驱动里用到的寄存器偏移直接从本 IP 生成的官方头文件取**：

@@ -33,7 +33,7 @@
  *
  *  ⚠⚠ **状态位在 CTRL(0x00)，不在什么 "STATUS 寄存器"。**
  *      0x04 是 GIE（全局中断使能）。本项目在 sobel_driver 上踩过
- *      这个坑（见 fpga-dev skill 09-pitfalls D2）：
+ *      这个坑 —— 本项目的起点工程（legacy/sobel/）就是栽在这里：
  *      驱动轮询 0x04 永远等不到 AP_DONE，而主机仿真自己造了个假
  *      STATUS 值所以看起来是通的 —— 上板才炸。
  *      本驱动从一开始就用正确的位置。

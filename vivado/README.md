@@ -1,29 +1,48 @@
 # vivado 索引
 
-## 两个 BD，互不影响
+## 本目录只有一个 BD：`bd_video`
 
-| 脚本 | 内容 | 状态 |
-|---|---|---|
-| `bd_sobel.tcl` | 原 Sobel 加速器（DMA + HP0） | ✅ 已跑通综合实现比特流、时序收敛 |
-| `bd_video.tcl` | **新增**视频流水线（VDMA + HP1/HP2） | ✅ 构建 + validate 通过 |
+视频流水线 + 预处理链，**已跑通到生成比特流**。
 
-**原 BD 保持原样不动**，作为可回滚的回归入口。两个 BD 各自的 PS 配置独立。
+| 脚本 | 作用 |
+|---|---|
+| `bd_video.tcl` | 建 Block Design（VDMA + 预处理链 + SCCB + Clocking Wizard） |
+| `create_project.tcl` | **一键建工程**：从零到比特流 + XSA |
+| `test_bd_video.tcl` | 只建 BD 并 validate（不综合，约 1 分钟） |
+| `test_video_io_xdc.tcl` | 加约束 + 综合（验证 XDC 真的生效） |
+| `constraints/video_io.xdc` | 主约束文件 |
+| `constraints/video_io_hdmi_tmp.xdc` | ⚠ HDMI 临时豁免（见「HDMI 通路」节） |
+| `constraints/hdmi_drc_hook.tcl` | ⚠ write_bitstream 的 pre-hook |
+
+> **原 Sobel 的 `bd_sobel.tcl` 已移到 `legacy/sobel/vivado/`** ——
+> 它作为"已验证的参照"与本项目并存，但不再参与本工程的构建。
+> 原因见 `docs/架构与接口契约.md` §4.1。
 
 ## 构建与验证
 
+从零建工程 → 综合 → 实现 → 比特流 → XSA（**约 20–40 分钟**）：
+
 ```bash
-# BD 构建 + validate（不生成比特流）
-vivado -mode batch -source vivado/test_bd_video.tcl
-
-# XDC 约束 + 综合（会真正跑一遍综合，验证约束是否生效）
-vivado -mode batch -source vivado/test_video_io_xdc.tcl
-
-# 只跑 bd_video.tcl（在已有工程里）
-vivado -mode batch -source vivado/bd_video.tcl
+vivado -mode batch -source vivado/create_project.tcl
 ```
 
-`test_bd_video.tcl` / `test_video_io_xdc.tcl` 都会在失败时立刻 `exit 1` 并打印错误，
-适合接进脚本。
+只想快速检查 BD 是否合法（约 1 分钟，不综合）：
+
+```bash
+vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
+```
+
+分步验证：
+
+```bash
+vivado -mode batch -source vivado/test_bd_video.tcl      # BD + validate
+vivado -mode batch -source vivado/test_video_io_xdc.tcl  # 约束 + 综合
+```
+
+> ⚠ **不要在 `vivado` 前面加 `bash`** —— 本目录里就有个 `vivado/` 目录，
+> `bash vivado` 会让 bash 去执行那个目录，报 `Is a directory`。
+
+所有脚本失败时会立刻 `exit 1` 并打印错误，适合接进 CI。
 
 ---
 
@@ -31,8 +50,11 @@ vivado -mode batch -source vivado/bd_video.tcl
 
 | 文件 | 内容 | 状态 |
 |---|---|---|
-| `constraints/sobel_io.xdc` | 原 Sobel 工程（保持不动） | ✅ |
-| `constraints/video_io.xdc` | 视频接口：PCLK 时钟 + 跨时钟域 | ✅ 综合验证通过 |
+| `constraints/video_io.xdc` | **主约束**：PCLK 时钟 + 跨时钟域 + 摄像头引脚 | ✅ 生效（综合后实测确认） |
+| `constraints/video_io_hdmi_tmp.xdc` | ⚠ **临时**：HDMI 端口的 DRC 豁免 | ⚠ 方案 B 做完后删 |
+| `constraints/hdmi_drc_hook.tcl` | ⚠ write_bitstream 的 pre-hook | ⚠ 同上 |
+
+> 原 Sobel 的 `sobel_io.xdc` 已随它一起移到 `legacy/sobel/vivado/constraints/`。
 
 ### video_io.xdc 的分层
 
@@ -155,8 +177,16 @@ DDR(96×96) ──► PS 侧 CNN 读这里
 | `dma_in` / `dma_out` | 见 Address Editor |
 | HP1/HP2/HP3 DDR | `0x0000_0000` (512M) |
 
-驱动里用这些地址访问，**不要硬编码** —— 从 `.hwh` 提取
-（见 skill 的 `pynq/ip_contract.py`）。
+驱动里用这些地址访问，**不要硬编码** —— 从生成的 `.hwh` 里读：
+
+```bash
+# .hwh 就在 BD 的 hw_handoff 目录下
+vivado/gesture_system/gesture_system.gen/sources_1/bd/bd_video/hw_handoff/bd_video.hwh
+```
+
+⚠ `.hwh` 是几十万字节的 XML，**不要直接读进上下文**（会吃掉整个窗口）。
+写个脚本提取，或用 PYNQ：`overlay.ip_dict` 直接给出所有 IP 的名字与地址
+（`host/gesture_overlay.py` 就是这么做的）。
 
 ### ⚠ 为什么预处理从 DDR 取数，而不是从 dvp_capture 分叉
 

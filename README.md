@@ -4,17 +4,22 @@
 > 改造中 Sobel 相关内容已从主线移除，那个参照工程完整保留在 `legacy/sobel/`。
 > 详见下文「原 Sobel 工程在哪」。
 >
-> ## 当前进度（2026-09-15）
+> ## 当前进度（2026-09-16）
 >
 > | 部分 | 内容 | 状态 |
 > |---|---|---|
-> | **HLS 处理链** | `src_hls/gesture_preproc.cpp` | ✅ csim 全过 + csynth II=1 + IP 已导出 |
+> | **HLS 处理链** | `src_hls/gesture_preproc.cpp` | ✅ **csim + csynth + cosim 全过**（cosim 6/6 事务），IP 已导出 |
 > | **RTL 外设** | `rtl/`：DVP 采集 + SCCB + 异步 FIFO + IOBUF + 寄存器表 | ✅ 3/3 TB PASSED |
-> | **BD 视频流水线** | `vivado/bd_video.tcl`（含预处理链 + Clocking Wizard + SCCB） | ✅ validate + 综合通过 |
+> | **BD 视频流水线** | `vivado/bd_video.tcl`（含预处理链 + Clocking Wizard + SCCB） | ✅ validate + 综合 + 实现 |
 > | **约束** | `vivado/constraints/video_io.xdc`（摄像头引脚已启用） | ✅ 综合验证生效 |
 > | **PS 侧驱动** | `sw/preproc_driver.c` | ✅ 主机自检 24/24 |
+> | **时序 / 比特流 / XSA** | 实现后实测 | ✅ **WNS +0.873 ns**，比特流 4.0 MB，XSA 755 KB |
 > | OV5640 寄存器表 | `rtl/ov5640_regs.v` | ⚠️ **占位**，需替换真表才能出图 |
+> | HDMI 输出 | TMDS 编码器 | ⚠️ 未做（端口暂用 DRC 豁免，见 `vivado/README.md`） |
 > | 板级实测 | — | ❌ 板子未到 |
+>
+> **一句话**：软件侧全部就绪，只差 OV5640 寄存器表 + 板子到货。
+> ⚠ 上板前必读 `docs/硬件采购清单.md` §3.3（引脚万用表复核）。
 >
 > ### 一键回归
 >
@@ -27,6 +32,17 @@
 > vivado -mode batch -source vivado/test_bd_video.tcl  # BD 构建 + validate
 > vivado -mode batch -source vivado/test_video_io_xdc.tcl  # XDC + 综合
 > ```
+>
+> **加跑 C/RTL 协同仿真**（验证综合后的 RTL 行为与 C 一致，慢）：
+>
+> ```bash
+> GESTURE_COSIM=1 vitis-run --mode hls --tcl src_hls/run_gesture.tcl
+> ```
+>
+> ⚠ **640×480 下 cosim 要跑很久**（实测仿真时间约 1.3 秒 → 实际数十分钟）。
+> 想快速验证，把 `src_hls/gesture_preproc.h` 的
+> `GESTURE_IN_WIDTH/HEIGHT` 临时改成 64，TB 会自适应。
+> 详见 `src_hls/README.md`。
 >
 > ⚠ **只有前两条加 `bash`** —— 它们自己就是 .sh 脚本。
 > 后三条是**外部可执行程序**，前面**不要**再加 `bash`：
@@ -76,7 +92,7 @@
 > | `src_hls/` | HLS 处理链（含语义契约与实测数据） | [`src_hls/README.md`](src_hls/README.md) |
 > | `rtl/` | 手写 Verilog（DVP/SCCB/CDC/IOBUF/寄存器表） | [`rtl/README.md`](rtl/README.md) |
 > | `sw/` | PS 侧驱动（预处理链） | [`sw/README.md`](sw/README.md) |
-> | `vivado/` | BD 脚本（含 12 个踩坑记录） | [`vivado/README.md`](vivado/README.md) |
+> | `vivado/` | BD 脚本（含 15 个踩坑记录） | [`vivado/README.md`](vivado/README.md) |
 > | `docs/` | 架构契约、采购清单、GUI 复现指南 | [`docs/README.md`](docs/README.md) |
 > | `host/` | Python golden 参考实现 | — |
 > | `sim/` | 测试向量生成与比对 | — |

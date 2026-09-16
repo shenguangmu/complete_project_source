@@ -122,7 +122,7 @@ create_bd_design $BD_NAME
 #  ⚠ 不要用 apply_bd_automation ... apply_board_preset 1
 #    它会把 PS7 整个重置成板卡预设，**覆盖掉这里设的 HP1/HP2**，
 #    之后 connect 报 "Arguments ... cannot be empty"，
-#    而报错行号离真正原因几十行。见 skill 09-pitfalls.md C1。
+#    而报错行号离真正原因几十行，极难往回查。
 # =====================================================================
 set ps7 [create_bd_cell -type ip -vlnv xilinx.com:ip:processing_system7 ps7]
 
@@ -453,7 +453,7 @@ connect_bd_intf_net [get_bd_intf_pins ic_hp3/M00_AXI]  [get_bd_intf_pins ps7/S_A
 #   vid_io_out / video_in / vtiming_in 三个，纯流式，无需配置。
 #   所以不要给它接 AXI-Lite。
 #   悬空的 AXI 主口不会报错、综合实现比特流全过，只有上板才炸
-#   —— 所以宁可少开一个口也不要留悬空。见 skill 04-vivado-bd 规则 4。
+#   —— 所以宁可少开一个口也不要留悬空。
 
 # ---- 数据通路：摄像头 → S2MM → HP1 ----
 connect_bd_intf_net [get_bd_intf_pins dvp_capture_0/m_axis]   [get_bd_intf_pins vdma/S_AXIS_S2MM]

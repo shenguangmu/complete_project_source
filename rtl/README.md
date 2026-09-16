@@ -20,7 +20,7 @@ bash rtl/run_iverilog.sh
 | `dvp_capture.v` | DVP 采集 → AXI4-Stream | ✅ TB PASSED (23/23) |
 | `async_fifo.v` | 异步 FIFO（PCLK→sysclk 跨时钟域） | ✅ 由 dvp_capture TB 覆盖 |
 | `ov5640_regs.v` | OV5640 寄存器 ROM | ⚠️ **占位表**，TB PASSED (11/11) 但内容未定 |
-| `iobuf_wrap.v` | IOBUF 三态缓冲包装（SDA 双向） | ❌ **未验证**（见下） |
+| `iobuf_wrap.v` | IOBUF 三态缓冲包装（SDA 双向） | ⚠️ **Functional 未验证**，但**已过综合/实现**（见下） |
 
 ### ⚠ 两个未完全验证的模块
 
@@ -30,7 +30,7 @@ TB 验的是**接口行为**（拼接顺序、位宽、边界），**不验内�
 表里的 8 条寄存器值是猜测，**不足以让 OV5640 出图**。
 必须替换成真实配置，来源见该文件头说明。
 
-**`iobuf_wrap.v` —— 无法用 iverilog 验证**
+**`iobuf_wrap.v` —— 功能无法用 iverilog 验证**
 
 它例化的是 Xilinx 原语 `IOBUF`，**iverilog 不认识**：
 
@@ -39,8 +39,18 @@ error: Unknown module type: IOBUF
 ```
 
 这是**预期行为**，不是 bug —— 原语只能在 Vivado 里综合。
-所以本模块的正确性**只能靠综合通过 + 上板实测**来确认。
-（它逻辑极简：一个三态缓冲 + 取反，风险很低。）
+
+**当前状态**（2026-09-16）：
+
+| 层次 | 结果 |
+|---|---|
+| iverilog 功能仿真 | ❌ 跑不了（原语不认） |
+| **Vivado 综合 + 实现** | ✅ **通过**（整个 BD 已生成比特流） |
+| 板级实测 | ❌ 等板子 |
+
+也就是说，**"能综合进去"已经验过了**，没验的是"三态行为是否符合预期"。
+它逻辑极简（一个三态缓冲 + 取反），风险低，但**这是一个已知的验证盲区** ——
+上板后如果 SCCB 读不到 ACK，要记得这里没被仿真验证过。
 
 ## 为什么这几个模块用 Verilog 而不是 HLS
 

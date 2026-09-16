@@ -65,10 +65,12 @@ gesture_comp/solution1/impl/ip/drivers/
 
 控制位：`ap_start`=bit0、`ap_done`=bit1、`ap_idle`=bit2、`ap_ready`=bit3。
 
-**本项目在 `sobel_driver` 上踩过这个坑**（见 fpga-dev skill
-09-pitfalls D2）：驱动轮询 `0x04` 永远等不到 `AP_DONE`，而主机仿真
-自己造了个假 STATUS 值，所以看起来是通的 —— **上板才炸**。
-`preproc_driver` 从一开始就用正确的位置。
+**本项目的起点工程（`legacy/sobel/`）就在这个坑上栽过**：
+驱动轮询 `0x04` 永远等不到 `AP_DONE`，而主机仿真自己造了个假
+STATUS 值，所以看起来是通的 —— **上板才会炸**。
+完整记录见 `legacy/sobel/sw/sobel_driver.h` 的注释。
+
+`preproc_driver` 从一开始就用正确的位置，正是因为踩过。
 
 ### 3. ⚠ 执行顺序不能反
 
@@ -123,11 +125,32 @@ CACHE_INVALIDATE(dst, PREPROC_OUT_BYTES);
 
 ---
 
+## 它对应的 BD
+
+驱动控制的三个 IP 都在 `vivado/bd_video.tcl` 里：
+
+```
+gesture_preproc_0   ← HLS 预处理链（AXI-Lite 配参数）
+dma_in              ← MM2S，读 DDR 里的 640×480 RGB565 进预处理
+dma_out             ← S2MM，把 96×96 灰度写回 DDR
+```
+
+**地址不硬编码** —— 从 `.hwh` 提取（`ip_contract.py` 可做），
+或直接用 PYNQ 的 `overlay.ip_dict`（`host/gesture_overlay.py` 就是这么做的）。
+
+## 当前状态
+
+| 项 | 状态 |
+|---|---|
+| 主机自检 | ✅ 24/24 通过（`bash sw/build_preproc_sim.sh`） |
+| 真机编译 | ❌ 未做（需板子 + XSA 建 Vitis 工程） |
+| 板级实测 | ❌ 未做（板子未到） |
+
 ## 待补
 
 | 项 | 说明 |
 |---|---|
-| **XCLK 配置** | Clocking Wizard 是 BD 里配的，驱动不需要管 |
-| **SCCB 寄存器表** | 在 `rtl/ov5640_regs.v` 里，**目前是占位表** |
-| **与 CNN 侧的接口** | 输出 buffer 的地址需要由驱动告知对方，目前还没实现协议 |
+| **SCCB 寄存器表** | 在 `rtl/ov5640_regs.v` 里，**目前是占位表** —— 这是上板前唯一的软件阻塞项 |
+| **与 CNN 侧的接口** | 输出 buffer 的地址需要由驱动告知对方，目前还没实现协议（`host/dump_frame.py` 已备好对拍格式） |
 | 中断模式 | 现在是轮询 `ap_done`；要改中断需在 BD 开 `PCW_USE_FABRIC_INTERRUPT` |
+| XCLK 配置 | Clocking Wizard 是 BD 里配的，驱动不需要管 ✓ |
