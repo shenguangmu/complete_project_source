@@ -433,13 +433,87 @@ CRITICAL WARNING: [Netlist 29-160] Cannot set property 'iostandard',
 
 ---
 
+## HDMI 通路（方案 B，未做）
+
+### 现状：卡在哪
+
+```
+vdma/M_AXIS_MM2S → v_axi4s_vid_out → vid_io_out（并行视频）→ ✗ 断了
+                         ▲
+                    v_tc/vtiming_out
+```
+
+BD 导出的 22 个 `hdmi_vid_out_*` 是**并行视频**，而 HDMI 物理接口要
+**TMDS 差分对**，两者数量对不上。缺两样：
+
+| 缺什么 | 为什么必须 |
+|---|---|
+| **像素时钟** | `vid_io_out` 是**接口，不携带时钟**。TMDS 需要独立的时钟对 `hdmi_tx_clk_p/n` |
+| **TMDS 编码器** | 并行 RGB + 同步信号 → 3 对差分串行（**8b/10b 编码**） |
+
+### 临时措施（方案 A，已实施）
+
+为了让比特流能生成：
+
+| 文件 | 作用 |
+|---|---|
+| `constraints/video_io_hdmi_tmp.xdc` | 把 `NSTD-1` / `UCIO-1` 两条 DRC 降级 |
+| `constraints/hdmi_drc_hook.tcl` | write_bitstream 的 **pre-hook**（关键） |
+
+⚠ **为什么必须用 pre-hook**：在工程里直接 `set_property SEVERITY`
+**无效** —— run 是独立进程。Vivado 的报错信息里明确说了要用 pre-hook。
+
+⚠ **代价**：22 个 HDMI 端口在比特流里**悬空**，**上板时不要接 HDMI 线**。
+CNN 通路与 HDMI 完全解耦，不受影响。
+
+### 方案 B 的完整计划
+
+| 步 | 产出 | 能否离线验证 |
+|---|---|---|
+| 1 | `rtl/tmds_encoder.v`（**纯 8b/10b 算法，不含原语**） | ✅ **iverilog 可测** |
+| 2 | `rtl/hdmi_tx.v`（例化 OSERDESE2 + OBUFDS） | ❌ 只能 Vivado 综合验证 |
+| 3 | MMCM 产生 **25.175 MHz** 像素时钟 | ✅ 综合后看频率 |
+| 4 | BD 集成 + 引脚约束（模板已在 `video_io.xdc` 第四层） | ✅ validate + 实现 |
+| 5 | 出比特流 | ✅ DRC 通过 |
+
+**关键设计**：第 1 步把 8b/10b 算法**单独抽出来**，它不依赖任何
+Xilinx 原语，**可以用 iverilog 喂已知像素、比对标准编码表**。
+这样核心逻辑可信，剩下的只是原语接线。
+
+**工作量**：① 30分 ② **2–4 小时（主要风险）** ③ 15分 ④ 15分 ⑤ 30分
+
+⚠ **最大问题**：第 2 步用的 `OSERDESE2` / `OBUFDS` **全是 Xilinx 原语**，
+iverilog 不认（与 `iobuf_wrap.v` 同样的问题）。**真正的验证只能等板子**，
+而 HDMI 出问题的症状（花屏/黑屏/不识别）在"编码错/时序错/接线错"
+之间很难区分。
+
+> **建议**：板子到货、主线（摄像头→预处理→DDR）验证通之后再动 B。
+> 那时可以边调边看，而不是盲写。
+
+### 顺带要修的已有缺陷
+
+`bd_video.tcl` 里 `H_ACTIVE` / `H_FRONT` / `V_ACTIVE` 等常量
+**只在一个 `puts` 里用过，没写进任何 IP**。`v_tc` 只设了
+`CONFIG.VIDEO_MODE {480p}`。做 B 时要一并补上显式时序参数：
+
+```tcl
+set_property -dict [list \
+    CONFIG.H_ACTIVE {640} CONFIG.H_FRONT {16} \
+    CONFIG.H_SYNC {96}    CONFIG.H_BACK  {48} \
+    CONFIG.V_ACTIVE {480} CONFIG.V_FRONT {10} \
+    CONFIG.V_SYNC {2}     CONFIG.V_BACK  {33} \
+] $vtc
+```
+
+---
+
 ## 未做的部分（故意分步）
 
 | 项 | 为什么不现在做 |
 |---|---|
-| **HDMI 的 TMDS 编码** | TMDS（8b/10b + 差分对）是独立问题。塞进这个 BD 会让"数据通路是否通"和"HDMI 能不能显示"两个问题纠缠。现在只把 `vid_io_out` 导出为外部接口。**且它需要一个像素时钟输出，而 `vid_io_out` 不携带时钟** —— 补齐要加 MMCM + 编码器，属于独立工作量 |
+| **HDMI 的 TMDS 编码** | 见上节「HDMI 通路（方案 B）」。已用临时措施让比特流能生成 |
 | **dvp_capture 的 AXI-Lite 控制口** | 当前 RTL 无寄存器接口，PS 读不到 `frame_cnt`/`stalled`。调试时用 ILA 看即可，需要时再加 |
-| **约束文件** | 摄像头引脚待硬件方案定；HDMI 引脚待 TMDS 补齐。`constraints/video_io.xdc` 里已留模板 |
+| **`rtl/ov5640_regs.v` 的真实寄存器表** | 目前是**占位表**，不足以让摄像头出图。**这是上板前唯一的软件阻塞项** |
 
 ## 已完成的验证
 
@@ -447,7 +521,37 @@ CRITICAL WARNING: [Netlist 29-160] Cannot set property 'iostandard',
 |---|---|
 | BD 构建 + `validate_bd_design` | ✅ 无 CRITICAL WARNING |
 | 时钟/复位/AXI 接口断言 | ✅ 全部通过 |
-| **综合** | ✅ 通过（LUT 23.94% / DSP 27.73% / BRAM 18.21%） |
+| **综合** | ✅ 通过 |
+| **实现（place & route）** | ✅ **完成** |
+| **时序收敛** | ✅ **WNS +0.873 ns**，TNS 0，0 个失败端点 |
+| **DRC** | ✅ 仅 Advisory（VDMA 内部 FIFO），无实质违规 |
+| **比特流** | ✅ **已生成**（4.0 MB，用 HDMI 临时豁免） |
+| **XSA** | ✅ 已导出（755 KB） |
+| 功耗 | ✅ 2.009 W，结温 48.2°C |
 | `video_io.xdc` 生效 | ✅ `cam_pclk` 与异步时钟组已确认 |
-| 实现 + 比特流 | ❌ **未跑** |
 | 板级实测 | ❌ 未做（板子未到） |
+
+### 最终资源占用（实现后实测）
+
+| 资源 | 用量 | 占比 |
+|---|---|---|
+| Slice LUTs | 11,177 | 21.01% |
+| Slice Registers | 14,810 | 13.92% |
+| Block RAM Tile | 25.5 | 18.21% |
+| DSPs | 61 | 27.73% |
+| Bonded IOB | 35 | 28.00% |
+
+### 时序余量
+
+```
+cam_pclk    WNS +35.020 ns   ← 24 MHz，余量巨大
+clk_fpga_0  WNS  +0.873 ns   ← 100 MHz，这是关键路径
+```
+
+### 产物位置
+
+```
+vivado/gesture_system/gesture_system.xsa                          ← 755 KB
+vivado/gesture_system/gesture_system.runs/impl_1/bd_video_wrapper.bit  ← 4.0 MB
+```
+

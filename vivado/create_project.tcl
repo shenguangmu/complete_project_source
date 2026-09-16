@@ -210,12 +210,53 @@ if {[file exists $xdc]} {
     puts ">>> 已加入约束: $xdc"
 }
 
+# HDMI 端口的临时豁免（方案 A）
+#
+# ⚠ 这个文件**不是**引脚约束，它只是把 bitgen 的两条 DRC 降级，
+#   让比特流能生成。真正的 HDMI 引脚约束（TMDS）留到方案 B。
+#   ⚠ **方案 B 做完后要把它和 hdmi_drc_hook.tcl 一起删掉。**
+set xdc_hdmi "$HERE/constraints/video_io_hdmi_tmp.xdc"
+if {[file exists $xdc_hdmi]} {
+    add_files -fileset constrs_1 -norecurse $xdc_hdmi
+    puts ">>> 已加入 HDMI 临时约束: $xdc_hdmi"
+    puts "    ⚠ 22 个 hdmi_vid_out_* 端口在比特流里悬空 —— 上板时勿接 HDMI"
+}
+
 update_compile_order -fileset sources_1
 
 # ---------------------------------------------------------------------
 #  5. 综合与实现（可选）
 # ---------------------------------------------------------------------
 if {$RUN_SYNTH} {
+
+    # ⚠⚠ 必须在 launch impl 之前设好 pre-hook
+    #
+    #  HDL 里导出的 22 个 `hdmi_vid_out_*` 端口目前**没有引脚约束**
+    #  （TMDS 编码器还没做），bitgen 的 DRC 会拒绝：
+    #      [DRC NSTD-1] Unspecified I/O Standard
+    #      [DRC UCIO-1] Unconstrained Logical Port
+    #      ERROR: [Vivado 12-1345] Error(s) found during DRC. Bitgen not run.
+    #
+    #  ⚠ Vivado 拦得**对** —— 不能把没指定的端口随便绑到 IO 上。
+    #
+    #  ⚠ 关键：用 `set_property SEVERITY {Warning}` 在工程里直接设**无效**，
+    #    因为 run 是独立进程。报错信息里明确说了要用 **pre-hook**：
+    #      "add this command to a .tcl file and add that file as a
+    #       pre-hook for write_bitstream step"
+    #
+    #  pre-hook 的副作用（必须知道）：那 22 个端口在比特流里**悬空**，
+    #  **上板时不要接 HDMI 线**。详见 constraints/video_io_hdmi_tmp.xdc。
+    #
+    #  ⚠⚠ 方案 B（TMDS 编码器）做完后，删掉这个 pre-hook 和
+    #     video_io_hdmi_tmp.xdc，启用 video_io.xdc 第四层的真实引脚约束。
+    set hook "$HERE/constraints/hdmi_drc_hook.tcl"
+    if {[file exists $hook]} {
+        set_property STEPS.WRITE_BITSTREAM.TCL.PRE $hook [get_runs impl_1]
+        puts ">>> 已设置 write_bitstream pre-hook（HDMI 端口临时豁免）"
+    } else {
+        puts "WARN: 找不到 $hook —— bitgen 会因 HDMI 端口未约束而失败"
+    }
+
     puts "\n>>> 开始综合..."
     launch_runs synth_1 -jobs 8
     wait_on_run synth_1

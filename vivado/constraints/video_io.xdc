@@ -309,6 +309,33 @@ set_property PULLUP true [get_ports io_scl]
 # set_property -dict { PACKAGE_PIN R19 IOSTANDARD LVCMOS33 } [get_ports hdmi_tx_hpdn]
 
 
+# ─────────────────────────────────────────────────────────────────────
+#  ⚠ 当前状态（2026-09-16）：HDMI 尚未接通，比特流用临时豁免生成
+# ─────────────────────────────────────────────────────────────────────
+#
+#  上面这段引脚约束**还是注释状态** —— 因为 BD 导出的 22 个
+#  `hdmi_vid_out_*` 端口是**并行视频**，与 TMDS 差分对数量对不上
+#  （缺像素时钟、缺编码器）。
+#
+#  为了让比特流能生成，用了**临时措施**：
+#      constraints/video_io_hdmi_tmp.xdc   ← 把两条 DRC 降级
+#      constraints/hdmi_drc_hook.tcl       ← write_bitstream 的 pre-hook
+#
+#  ⚠ 代价：那 22 个端口的**具体引脚无法约束**，比特流里是悬空的
+#     —— 我实测过，Vivado **拒绝**把没引脚的端口写进比特流
+#     （[DRC UCIO-1] Unconstrained Logical Port），
+#     所以只能降级 DRC 而不是"随便指派引脚"。
+#
+#  ⚠ 上板注意事项：**不要接 HDMI 线**。悬空 IO 电平不确定，
+#     接显示器无效。CNN 通路与 HDMI 完全解耦，不受影响。
+#
+#  ── 方案 B（TMDS 编码器）做完后要做的三件事 ──
+#    1. 取消注释上面的引脚约束
+#    2. **删掉** video_io_hdmi_tmp.xdc 和 hdmi_drc_hook.tcl
+#    3. 从 create_project.tcl 里去掉 pre-hook 那段设置
+#
+#  完整计划见 vivado/README.md 的「HDMI 通路（方案 B）」章节。
+
 # =====================================================================
 #  第五层：调试信号与通用约束（已启用）
 # =====================================================================
