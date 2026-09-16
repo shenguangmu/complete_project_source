@@ -38,13 +38,52 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
-CLANG_DIR="D:/BaiduNetdiskDownload/2025.2/Vitis/win64/tools/clang-16/bin"
+# ⚠ clang 的路径**不能写死** —— 每台机器的安装位置不同。
+#   按这个顺序找：
+#     1) 环境变量 VITIS_CLANG（显式指定，最优先）
+#     2) 从 XILINX_VITIS 推导（Vitis 装好后一般都有这个变量）
+#     3) 常见安装路径（本机验证过的几个）
+CLANG_DIR=""
 
-if [ ! -x "$CLANG_DIR/clang.exe" ]; then
-    echo "ERROR: 找不到 Vitis 自带的 clang：$CLANG_DIR/clang.exe"
-    echo "       若 Vitis 装在别处，请改本脚本的 CLANG_DIR"
+# 1) 显式指定
+if [ -n "${VITIS_CLANG:-}" ]; then
+    CLANG_DIR="$VITIS_CLANG"
+fi
+
+# 2) 从 XILINX_VITIS 推导
+if [ -z "$CLANG_DIR" ] && [ -n "${XILINX_VITIS:-}" ]; then
+    # 转成 POSIX 路径（Windows 的 D:\... → /d/...）
+    cand="$(cygpath -u "$XILINX_VITIS" 2>/dev/null || echo "$XILINX_VITIS")"
+    if [ -x "$cand/win64/tools/clang-16/bin/clang.exe" ]; then
+        CLANG_DIR="$cand/win64/tools/clang-16/bin"
+    fi
+fi
+
+# 3) 常见安装位置
+if [ -z "$CLANG_DIR" ]; then
+    for cand in         "D:/Xilinx/Vitis/win64/tools/clang-16/bin"         "C:/Xilinx/Vitis/win64/tools/clang-16/bin"         "/c/Xilinx/Vitis/win64/tools/clang-16/bin"         "/opt/Xilinx/Vitis/win64/tools/clang-16/bin"
+    do
+        if [ -x "$cand/clang.exe" ]; then CLANG_DIR="$cand"; break; fi
+    done
+fi
+
+if [ -z "$CLANG_DIR" ] || [ ! -x "$CLANG_DIR/clang.exe" ]; then
+    echo "ERROR: 找不到 Vitis 自带的 clang"
+    echo ""
+    echo "  按这个顺序找过："
+    echo "    1) 环境变量 \$VITIS_CLANG      （当前: ${VITIS_CLANG:-未设置}）"
+    echo "    2) 环境变量 \$XILINX_VITIS     （当前: ${XILINX_VITIS:-未设置}）"
+    echo "    3) 几个常见安装路径"
+    echo ""
+    echo "  解决办法（任选）："
+    echo "    export VITIS_CLANG=/你的/Vitis/win64/tools/clang-16/bin"
+    echo "  或直接用 gcc/clang 编译（本脚本的逻辑很简单，任一 C 编译器都行）："
+    echo "    clang -DPREPROC_SIM_BUILD -I. preproc_driver.c preproc_sim.c \\"
+    echo "          main_preproc.c -o preproc_sim"
     exit 1
 fi
+
+echo "  使用 clang: $CLANG_DIR"
 
 # ⚠ 追加而不是替换 —— 保留原有 PATH
 export PATH="$PATH:$CLANG_DIR"

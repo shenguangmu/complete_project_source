@@ -1,7 +1,7 @@
 # 手势识别系统 —— PL 侧
 
-> **本项目从 `E:\project`（一个已跑通的 Sobel 加速器工程）复制改造而来。**
-> 改造中 Sobel 相关内容已全部移除，那个参照工程完整保留在原处。
+> **本项目从本仓库 `legacy/sobel/` 下的 Sobel 加速器工程复制改造而来。**
+> 改造中 Sobel 相关内容已从主线移除，那个参照工程完整保留在 `legacy/sobel/`。
 > 详见下文「原 Sobel 工程在哪」。
 >
 > ## 当前进度（2026-09-15）
@@ -18,7 +18,7 @@
 >
 > ### 一键回归
 >
-> **在工程根目录**（`E:\complete_project`）下逐条执行：
+> **在工程根目录**（即本仓库克隆下来的顶层目录）下逐条执行：
 >
 > ```bash
 > bash rtl/run_iverilog.sh                             # RTL（秒级，无需 license）
@@ -98,22 +98,22 @@
 
 ## 原 Sobel 工程在哪
 
-这个项目是从 `E:\project`（一个**已完整跑通**的 Sobel 加速器工程）
-复制出来改造的。改造过程中，Sobel 相关的源码、BD 与驱动
-**已全部从本项目移除** —— 它们唯一的用途是"已验证、可回滚的参照"，
-那个参照现在由 **`E:\project`** 完整承担（含它自己的 README、
-GUI 复现指南与全部踩坑记录）。
+这个项目是从 **本仓库 `legacy/sobel/` 下那个已跑通的 Sobel 加速器工程**
+复制改造而来的（它一并放在仓库里，方便对照）。改造过程中，Sobel 相关的
+源码、BD 与驱动**已全部从主线目录移除** —— 它们唯一的用途是
+"已验证、可回滚的参照"，那个参照现在由 `legacy/sobel/` 承担。
 
 | 想看什么 | 去哪 |
 |---|---|
-| Sobel 加速器的源码/BD/驱动 | `E:\project\` |
-| Sobel 的完整文档（含 §9 踩坑） | `E:\project\README.md` |
-| Sobel 的 GUI 复现指南 | `E:\project\docs\GUI复现指南.md` |
+| Sobel 加速器的源码/BD/驱动 | `legacy/sobel/` |
+| Sobel 的完整文档（含 §9 踩坑） | `legacy/sobel/README.md` |
+| Sobel 的 GUI 复现指南 | `legacy/sobel/docs/GUI复现指南.md` |
 
 > ⚠ **本项目的 `src_hls/gesture_preproc.cpp` 大量复用了 Sobel 那版的
 > 行缓存骨架**（3 行 BRAM + 3 级列移位寄存器）。改那部分代码时，
-> `E:\project\src_hls\sobel_hls.cpp` 是重要的对照参考 ——
-> 那是本项目里唯一被硬件流程验证过的骨架。
+> `legacy/sobel/src_hls/sobel_hls.cpp` 是重要的对照参考 ——
+> 那是整个仓库里唯一经硬件流程完整验证过的骨架
+> （csynth II=1、时序收敛 WNS +1.100 ns）。
 
 ---
 

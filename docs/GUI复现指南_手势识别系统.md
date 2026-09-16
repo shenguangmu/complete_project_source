@@ -6,7 +6,7 @@
 > **适用范围**：从**加入 RTL 源**到**综合实现**这一段。
 >
 > **HLS 部分不在这里** —— 那一块见
-> `E:\project\docs\GUI复现指南.md`（原 Sobel 工程的指南，已实机验证过）。
+> `legacy/sobel/docs/GUI复现指南.md`（原 Sobel 工程的指南，已实机验证过）。
 > 里面的 HLS 组件操作（建组件、填向导、跑 csim/csynth、导出 IP）
 > 与本项目完全通用，只是文件名换成 `gesture_preproc.cpp` /
 > `tb_gesture.cpp` / `gesture_config.cfg`。
@@ -28,7 +28,7 @@
 - **第六部分**：上板（含前置条件与验证顺序）
 
 > ⚠ 本文**不含 HLS 部分**（建组件、跑 csim/csynth、导出 IP）。
-> 那一块见 `E:\project\docs\GUI复现指南.md`，与本项目通用。
+> 那一块见 `legacy/sobel/docs/GUI复现指南.md`，与本项目通用。
 
 ### 0.1 前置：先跑一遍命令行版
 
@@ -60,10 +60,10 @@ ERROR: [IMPL 213-4] Cannot find Vivado, please check XILINX_VIVADO
 > 环境变量残留了旧路径。设成当前实际安装路径覆盖掉它：
 >
 > ```bash
-> export XILINX_VIVADO=D:/BaiduNetdiskDownload/2025.2/Vivado
+> export XILINX_VIVADO=/你的/Vivado安装路径/Vivado
 > ```
 >
-> 详见 `E:\project\docs\GUI复现指南.md` §0.2。
+> 详见 `legacy/sobel/docs/GUI复现指南.md` §0.2。
 
 ---
 

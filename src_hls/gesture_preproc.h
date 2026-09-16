@@ -69,7 +69,7 @@ typedef ap_uint<8> gray_t;
  *  缺了它 Vivado 会报
  *    "Interface connected to S_AXIS_S2MM does not have TLAST port"
  *  且 DMA 会一直等下去。这个坑现有 sobel 工程已经踩过，
- *  详见 E:\project\README.md §9.6。 */
+ *  详见 legacy/sobel/README.md §9.6。 */
 typedef ap_axiu<16, 0, 0, 0> axis_rgb_t;
 
 /** 输出流：8bit 灰度 */

@@ -1,7 +1,7 @@
 # src_hls 索引
 
 > 本目录是**手势识别预处理链**这一套 HLS 工程。
-> 原 Sobel 那套已移出本项目（参照在 `E:\project`），见 §二。
+> 原 Sobel 那套已移出本项目（参照在 `legacy/sobel`），见 §二。
 
 ## 一、手势预处理链（本项目主体）
 
@@ -25,12 +25,12 @@ vitis-run --mode hls --tcl src_hls/run_gesture.tcl
 
 Sobel 那套（`sobel_hls.h/.cpp`、`tb_sobel.cpp`、`run_hls.tcl`、
 `hls_config.cfg`）**已从本项目移除** —— 它唯一的作用是"已验证的骨架参照"，
-而那个参照现在由完整的 `E:\project` 承担。
+而那个参照现在由本仓库 `legacy/sobel/` 完整承担。
 
 > ⚠ **但它的价值还在**：本目录的 `gesture_preproc.cpp` 里
 > `win_push()` 那套行缓存骨架（3 行 BRAM + 3 级列移位寄存器）
 > **直接搬自 Sobel 那版**。改这部分时，
-> `E:\project\src_hls\sobel_hls.cpp` 是最重要的对照参考 ——
+> `legacy/sobel/src_hls/sobel_hls.cpp` 是最重要的对照参考 ——
 > 它是唯一被硬件流程验证过（II=1、时序收敛）的骨架。
 
 ---

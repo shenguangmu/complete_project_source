@@ -19,10 +19,10 @@ bash sw/build_preproc_sim.sh     # 预处理链驱动的主机自检
 | `preproc_driver.c/.h` | `bd_video.tcl` | gesture_preproc + 两个 DMA | ✅ 自检 24/24 |
 
 Sobel 那套驱动（`sobel_driver.c/.h`、`main.c`、`sim_dma.c`）
-**已从本项目移除**，参照在 `E:\project`。
+**已从本项目移除**，参照在 `legacy/sobel`。
 
 > ⚠ 但 `sobel_driver` 里那个 **D2 坑**（状态位在 CTRL(0x00) 而非 0x04）
-> 的完整记录仍在 `E:\project\sw\sobel_driver.h`，值得一读 ——
+> 的完整记录仍在 `legacy/sobel/sw/sobel_driver.h`，值得一读 ——
 > 本驱动从一开始就用对了位置，正是因为它踩过。
 
 ---
