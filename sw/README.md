@@ -150,7 +150,9 @@ dma_out             ← S2MM，把 96×96 灰度写回 DDR
 
 | 项 | 说明 |
 |---|---|
-| **SCCB 寄存器表** | 在 `rtl/ov5640_regs.v` 里，**目前是占位表** —— 这是上板前唯一的软件阻塞项 |
+| **SCCB 寄存器表** | `rtl/ov5640_regs.v` —— ✅ **2026-09-17 已换为真表**（250 条，正点原子来源，固化 640×480 RGB565）。⚠ **未上板实测** |
 | **与 CNN 侧的接口** | 输出 buffer 的地址需要由驱动告知对方，目前还没实现协议（`host/dump_frame.py` 已备好对拍格式） |
+| **`sccb_0` 的 N_REGS** | ⚠ BD 里必须是 **250**（与 `ov5640_regs.v` 一致）。`sccb_master.v` 的默认值是 64，不一致会**配到一半就停且无报错** |
+| **`ov5640_regs` 拼接顺序** | ⚠ `tbl_data = {reg_addr[15:0], value[7:0]}`，高 16 位是寄存器地址。反了会往错误寄存器写值，而 SCCB 波形看起来完全正常（见 `rtl/tb/tb_ov5640_regs.v`） |
 | 中断模式 | 现在是轮询 `ap_done`；要改中断需在 BD 开 `PCW_USE_FABRIC_INTERRUPT` |
 | XCLK 配置 | Clocking Wizard 是 BD 里配的，驱动不需要管 ✓ |

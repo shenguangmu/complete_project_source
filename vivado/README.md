@@ -228,7 +228,7 @@ PS 侧流程：
 
 ---
 
-## ⚠ 踩过的 15 个坑（都在脚本注释里）
+## ⚠ 踩过的 19 个坑（都在脚本注释里）
 
 这些坑的共同特点：**错误信息与真正原因不在同一处**，或者**综合能过、上板才炸**。
 
@@ -441,7 +441,7 @@ get_cells -hier -filter {NAME =~ "*关键字*"}   # 层次单元名
 > 抄约束时不会连带抄来"这条在当前设计里成不成立"，
 > 所以抄来的约束**必须逐条验证**。
 
-### 15. `[Netlist 29-160]` 来自 Vivado 自动生成的 PS7 约束，可忽略
+### 15. `[Netlist 29-160]` 来自 Vivado 自动生成的 PS7 约束（**产物无害，但已降级为 INFO**）
 
 综合日志里会刷 **101 条**：
 
@@ -457,9 +457,115 @@ CRITICAL WARNING: [Netlist 29-160] Cannot set property 'iostandard',
 **为什么报**：这些引脚在**综合阶段还不存在**（PS 的 IO 由硬核管理，
 不出现在 PL 的 netlist 里）。实现阶段会正常应用。
 
-**结论**：不是本项目的问题，**忽略**。
-判据是看 `[文件路径]` —— 指向 `gesture_system.gen/.../ip/` 下的
-都是 Vivado 自动生成的，指向 `vivado/constraints/` 才是我们的。
+**结论**：不是本项目的问题，判据是看 `[文件路径]` ——
+指向 `gesture_system.gen/.../ip/` 下的都是 Vivado 自动生成的，
+指向 `vivado/constraints/` 才是我们的。
+
+> ⚠ **但"忽略"≠"不管"**（2026-09-17 更正）：
+> 这 100 条 CRITICAL WARNING 会**刷屏掩盖真问题** ——
+> 本项目的 PS7 DDR 参数错误（出厂默认 `MT41J128M8` vs 板上
+> `MT41K256M16`）当初就是被这批告警盖住的。
+>
+> 现在 `create_project.tcl` 里已加
+> `set_msg_config -id {Netlist 29-160} -new_severity INFO`
+> 把它们降为 INFO，让真问题浮出来。
+
+### 16. **顶层被静默设成子模块**，整条 BD 未进综合
+
+**现象**：实现阶段报
+```
+[DRC NSTD-1] 67 out of 67 logical ports use IOSTANDARD 'DEFAULT'
+问题端口: cam_data[7:0], frame_cnt[15:0], line_cnt[15:0], aclk, pclk ...
+```
+这些是 **`dvp_capture` 的端口**，不是顶层 wrapper 的。
+日志里是 `Command: synth_design -top dvp_capture`，
+且 `synth_1` **只综合了 dvp_capture + async_fifo 两个模块**。
+
+**根因**：BD 生成时会**重新生成 wrapper**，把 `make_wrapper` 的产物
+从工程文件表里挤掉。Vivado 只好在剩余模块里**自动挑一个当顶层** ——
+挑中了 `dvp_capture` 这个**子模块**。
+
+**为什么难查**：**全流程静默通过** —— 综合、实现、出比特流都不报错，
+只有 DRC 会冒出一堆莫名其妙的端口名。
+
+**对策**（已加进 `create_project.tcl`）：
+```tcl
+set top_now [get_property top [current_fileset]]
+if {$top_now ne "${BD_NAME}_wrapper"} {
+    error "顶层设置失败：期望 ... 实际 '$top_now'"
+}
+```
+**必须回读断言，不能靠"没报错就当对了"。**
+
+---
+
+### 17. `launch_runs` 对已失败的 run **不做任何事** → 重试是假的
+
+**现象**：给 run 加"失败就重跑"的重试，日志显示重试了，但**同一秒就返回**：
+```
+>>> synth_1 进度 0% —— 第 1 次未完成
+>>> 重试...
+[21:38:34] Waiting for synth_1 to finish...
+[21:38:34] synth_1 finished        ← 同一秒返回，根本没跑
+```
+
+**根因**：`launch_runs` 认为那个 run "已经跑过了"（只是结果是失败），
+于是什么都不做。**光靠"再 launch 一次"是假重试。**
+
+**对策**：重试前先 `reset_run`（已完成的子 run 不受影响，只有失败的需要重跑）：
+```tcl
+if {$attempt > 1} { catch {reset_run -quiet $run_name} }
+```
+
+**配套坑**：找失败子 run **不能用** `get_runs "${run_name}_*"` ——
+run 叫 `synth_1`，子 run 却叫 `bd_video_dma_in_0_synth_1`，**glob 匹配不到**，
+那段诊断会**静默失效**。要遍历全部 run 按后缀筛。
+
+---
+
+### 18. `get_timing_paths` 需要**已打开的设计**
+
+**现象**：脚本跑到 "实现完成" 后突然中断：
+```
+>>> 实现完成
+ERROR: [Common 17-53] User Exception: No open design.
+```
+**后果**：XSA 导出和资源报告**根本没执行到** ——
+而 `write_bitstream completed successfully` 就在日志里，
+容易误以为"都成功了"。
+
+**根因**：`get_timing_paths` 写在 `open_run impl_1` **之前**。
+
+**对策**：`open_run` 必须在前面；且时序查询本身加 `catch`
+—— 它只是**报告**，不该有中断整个流程的能力。
+
+**教训**：脚本"跑到最后一行"和"所有产物都生成了"是**两回事**。
+
+---
+
+### 19. `[Common 17-1257/354] Failed to create directory 'C'` —— 产物无害，**流程致命**
+
+**现象**：OOC 综合日志里出现（每次打中的 run 都不一样，随机）：
+```
+ERROR: [Common 17-354] Could not open 'C' for writing.
+ERROR: [Common 17-1257] Failed to create directory 'C'.
+```
+看起来像环境变量问题（某个变量为空被展开成裸盘符 `C`），**但不是**。
+
+**根因**：一次性启动 16–22 个 OOC 综合，每个 Vivado 实例都要建一批
+临时目录 —— **并发建目录竞争的瞬时失败**。重跑必然成功
+（中招的 run 自己的 `.dcp` 其实照样生成了）。
+已排除：`TEMP`/`TMP` 正常、无空环境变量、脚本里没有任何地方传过 `"C"`。
+
+**⚠ 为什么不能当噪声忽略**：Vivado 会把这个瞬时失败**判定成 run 失败**：
+```
+ERROR: [Vivado 12-13638] Failed runs(s) : '<run 名>'
+ERROR: [Common 17-39] 'wait_on_runs' failed due to earlier errors.
+```
+于是 `wait_on_run` **直接抛错返回**，脚本中断 —— **XSA 根本导不出来**。
+
+**对策**：`create_project.tcl` 里已加带 `reset_run` 的重试（见坑 17）。
+实测一次运行有 10 个子 run 中招，重试一次后全部恢复。
 
 ---
 
@@ -543,7 +649,7 @@ set_property -dict [list \
 |---|---|
 | **HDMI 的 TMDS 编码** | 见上节「HDMI 通路（方案 B）」。已用临时措施让比特流能生成 |
 | **dvp_capture 的 AXI-Lite 控制口** | 当前 RTL 无寄存器接口，PS 读不到 `frame_cnt`/`stalled`。调试时用 ILA 看即可，需要时再加 |
-| **`rtl/ov5640_regs.v` 的真实寄存器表** | 目前是**占位表**，不足以让摄像头出图。**这是上板前唯一的软件阻塞项** |
+| ~~`rtl/ov5640_regs.v` 的真实寄存器表~~ | ✅ **2026-09-17 已换为真表**（250 条，正点原子来源，固化 640×480 RGB565）。⚠ **未上板实测**。⚠ BD 里 `sccb_0` 的 `N_REGS` 必须同为 250（默认 64，不改会配到一半就停且无报错） |
 
 ## 已完成的验证
 
@@ -553,7 +659,7 @@ set_property -dict [list \
 | 时钟/复位/AXI 接口断言 | ✅ 全部通过 |
 | **综合** | ✅ 通过 |
 | **实现（place & route）** | ✅ **完成** |
-| **时序收敛** | ✅ **WNS +0.873 ns**，TNS 0，0 个失败端点 |
+| **时序收敛** | ✅ **WNS +0.265 ns**，TNS 0，0 个失败端点。⚠ **逐次波动大**：同一设计三次实现实测为 +0.873 / +1.177 / **+0.265** ns（布线是随机的）。余量不大，后续加逻辑要留意 |
 | **DRC** | ✅ 仅 Advisory（VDMA 内部 FIFO），无实质违规 |
 | **比特流** | ✅ **已生成**（4.0 MB，用 HDMI 临时豁免） |
 | **XSA** | ✅ 已导出（755 KB） |
@@ -575,7 +681,7 @@ set_property -dict [list \
 
 ```
 cam_pclk    WNS +35.020 ns   ← 24 MHz，余量巨大
-clk_fpga_0  WNS  +0.873 ns   ← 100 MHz，这是关键路径
+clk_fpga_0  WNS  +0.265 ns   ← 100 MHz，这是关键路径（逐次波动 0.265~1.177）
 ```
 
 ### 产物位置

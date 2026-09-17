@@ -61,7 +61,7 @@ README.md                          ← 总入口，含进度表与一键回归�
 ├── rtl/README.md                  ← 手写 Verilog（含验证盲区说明）
 ├── sw/README.md                   ← PS 侧驱动
 ├── host/README.md                 ← PC 侧工具（golden / 对拍 / overlay）
-├── vivado/README.md               ← BD 脚本（含 15 个踩坑记录）
+├── vivado/README.md               ← BD 脚本（含 19 个踩坑记录）
 └── legacy/README.md               ← 原 Sobel 参照工程（为什么在这）
 ```
 

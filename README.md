@@ -135,7 +135,7 @@ vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
 > | `src_hls/` | HLS 处理链（含语义契约与实测数据） | [`src_hls/README.md`](src_hls/README.md) |
 > | `rtl/` | 手写 Verilog（DVP/SCCB/CDC/IOBUF/寄存器表） | [`rtl/README.md`](rtl/README.md) |
 > | `sw/` | PS 侧驱动（预处理链） | [`sw/README.md`](sw/README.md) |
-> | `vivado/` | BD 脚本（含 15 个踩坑记录） | [`vivado/README.md`](vivado/README.md) |
+> | `vivado/` | BD 脚本（含 19 个踩坑记录） | [`vivado/README.md`](vivado/README.md) |
 > | `docs/` | 架构契约、采购清单、GUI 复现指南 | [`docs/README.md`](docs/README.md) |
 > | `host/` | Python golden 参考实现 | — |
 > | `sim/` | 测试向量生成与比对 | — |
@@ -213,5 +213,6 @@ vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
 ⑤ 最后才查数据线
 ```
 
-**现在还缺的**：`rtl/ov5640_regs.v` 是**占位表**，
-不足以让摄像头出图。必须替换成真实配置（来源见该文件头说明）。
+**摄像头配置表**：✅ 2026-09-17 已由占位表换成**真表**
+（250 条，正点原子来源，固化 640×480 RGB565）。
+⚠ **未上板实测** —— 能否出图要上板才知道。
