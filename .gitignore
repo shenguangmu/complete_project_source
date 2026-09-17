@@ -35,6 +35,11 @@ vivado/**/*.ip_user_files/
 vivado/**/*.runs/
 vivado/**/*.sim/
 
+# ⚠ utilization.rpt 是**纯报告**（每次实现重新生成），不入版本控制。
+#   它里面还记录了调用命令的绝对路径，含仓库名。
+#   ⚠ 但 .xpr **要保留** —— 见下面说明。
+vivado/gesture_system/utilization.rpt
+
 # ⚠⚠ **不要**忽略整个 `*.srcs/` 目录。
 #   git 的规则是：**父目录一旦被忽略，就无法用 `!` 放行其中的文件**。
 #   我试过 `*.srcs/` + `!.../bd/bd_video/**` 想放行 BD 源，

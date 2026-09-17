@@ -81,6 +81,25 @@ create_project $PROJ_NAME $PROJ_DIR -part $PART_NAME -force
 set_property target_language Verilog [current_project]
 
 # ---------------------------------------------------------------------
+#  降噪：Netlist 29-160
+#
+#  现象：实现阶段刷 100 条 CRITICAL WARNING，全部指向 PS7 IP **自己生成**的
+#        bd_video_ps7_0.xdc（set_property iostandard ... [get_ports "DDR_VRP"]）。
+#
+#  原因：那份 XDC 是 PS7 IP 生成的，用 `get_ports` 写的是**作用域约束**。
+#        它在 OOC 综合时正常（bd_video_ps7_0_synth_1 里 0 报错），
+#        只在顶层 link_design 读 .dcp 复现 PS7 时报 —— 因为顶层根本没有
+#        DDR_* 端口，约束无处落地。DDR 引脚/电平约束同时内建在 ps7 的 .dcp 里，
+#        仍然生效，所以这 100 条是重复告警，不是真问题。
+#
+#  ⚠ 必须在这里设 —— 属主每轮 create_project 都会重置成当前用户，
+#    写进 .xpr 也留不住，所以放在建工程之后。
+#     注意别改成 -new_severity Error，那是反向操作。
+# ---------------------------------------------------------------------
+set_msg_config -id {Netlist 29-160} -new_severity INFO
+puts ">>> 已把 Netlist 29-160 降为 INFO（PS7 IP 自生成 XDC 的已知重复告警）"
+
+# ---------------------------------------------------------------------
 #  1. 加入 RTL 源（本项目手写的 Verilog）
 #
 #  ⚠ 五个都要加：
@@ -190,6 +209,7 @@ foreach wf [glob -nocomplain \
     file delete -force $wf
 }
 
+# ⚠ 顺序不能反：必须在 BD 已经 build 完（source bd_video.tcl 结尾）之后
 set bdfile [get_files "${BD_NAME}.bd"]
 make_wrapper -files $bdfile -top -import
 
@@ -200,8 +220,41 @@ if {[llength $wrapper] > 0} {
     set_property top "${BD_NAME}_wrapper" [current_fileset]
     puts ">>> 顶层设为 ${BD_NAME}_wrapper"
 } else {
-    puts "WARN: 未找到 wrapper"
+    error "未找到 wrapper：$PROJ_DIR/$PROJ_NAME.gen/sources_1/bd/$BD_NAME/hdl/${BD_NAME}_wrapper.v"
 }
+
+# ---- ⚠ 不要把 rtl/*.v 从工程移除！----
+#
+#  2026-09-17 的教训：曾经加过一段"把 RTL 外部副本从工程移除"的代码，
+#  理由是"BD 里已有 RTL Module Reference，外部副本是多余的"。**那是错的**：
+#
+#      ERROR: [filemgmt 56-587] Failed to resolve reference.
+#             Nothing was found in the project to match the name dvp_capture
+#      ERROR: [Runs 36-346] File '.../bd_video_dvp_capture_0_0.xci'
+#             needed for run contains invalid reference(s).
+#
+#  BD 为每个 RTL Module Reference 生成的 `.xci` **需要外部源文件才能展开**。
+#  移除后综合连启动都启动不了。所以那 5 个 rtl/*.v **必须同时存在于 sources_1**。
+
+# ---- 顶层断言：这是"顶层被静默设成子模块"事故的直接防线 ----
+#
+#  那个 bug 的后果是"top 悄悄变成了一个子模块"，
+#  而 Vivado **不会为此报任何错**。所以必须自己回读确认。
+set top_now [get_property top [current_fileset]]
+if {$top_now ne "${BD_NAME}_wrapper"} {
+    error "顶层设置失败：期望 ${BD_NAME}_wrapper，实际 '$top_now'"
+}
+if {[llength [get_files -quiet *${BD_NAME}_wrapper.v]] == 0} {
+    error "wrapper 未登记进工程文件表（make_wrapper 成功了但 add_files 没生效）"
+}
+# 再确认 BD 依赖的 RTL 源确实还在（防止将来又被"优化"掉）
+foreach f $rtl_files {
+    set p [file normalize "$PROJ_ROOT/rtl/$f"]
+    if {[llength [get_files -quiet $p]] == 0} {
+        error "RTL 源 $f 不在工程里 —— BD 的 IP .xci 依赖它，综合会直接失败"
+    }
+}
+puts ">>> 顶层断言通过 ($top_now)"
 
 # 约束文件
 set xdc "$HERE/constraints/video_io.xdc"
@@ -257,30 +310,84 @@ if {$RUN_SYNTH} {
         puts "WARN: 找不到 $hook —— bitgen 会因 HDMI 端口未约束而失败"
     }
 
+    # ---- 带重试的 run 启动 ----
+    #
+    #  ⚠⚠ 为什么必须重试：OOC 综合子进程会**非确定性地**失败。
+    #    本机实测（2026-09-17）：一次运行里 22 个 OOC run 有 3 个中招，
+    #    另一次有 2 个。报错是：
+    #        ERROR: [Common 17-354] Could not open 'C' for writing.
+    #        ERROR: [Common 17-1257] Failed to create directory 'C'.
+    #    这是**进程启动期的瞬时竞争**，重跑必然成功。
+    #
+    #  ⚠⚠ 但它对**流程**是有害的：
+    #        ERROR: [Vivado 12-13638] Failed runs(s) : '<run 名>'
+    #        ERROR: [Common 17-39] 'wait_on_runs' failed due to earlier errors.
+    #     于是 wait_on_run **直接抛错返回**，脚本中断 ——
+    #     XSA 导出和资源报告根本执行不到。
+    #
+    #  ⚠ 失败必须 reset_run 再重跑 —— 这是实测踩出来的：
+    #    launch_runs 对**已经失败的 run 不做任何事**（它认为"跑过了"），
+    #    光靠"再 launch 一次"重试是**假重试**。
+    proc run_with_retry {run_name launch_args {max_attempts 3}} {
+        for {set attempt 1} {$attempt <= $max_attempts} {incr attempt} {
+            if {$attempt > 1} {
+                catch {reset_run -quiet $run_name}
+            }
+            catch {launch_runs $run_name -jobs 8 {*}$launch_args}
+            catch {wait_on_run $run_name}
+            set prog [get_property PROGRESS [get_runs $run_name]]
+            if {$prog eq "100%"} {
+                if {$attempt > 1} {
+                    puts ">>> $run_name 在第 $attempt 次尝试后完成"
+                }
+                return 1
+            }
+            puts ">>> $run_name 进度 $prog —— 第 $attempt 次未完成"
+            set bad {}
+            foreach sr [get_runs] {
+                set sn [get_property NAME $sr]
+                if {$sn eq $run_name} { continue }
+                if {[string match "*_$run_name" $sn] &&
+                    [get_property PROGRESS $sr] ne "100%"} {
+                    lappend bad $sn
+                }
+            }
+            if {[llength $bad] > 0} {
+                puts "      未完成的子 run: [join $bad {, }]"
+            }
+            if {$attempt < $max_attempts} {
+                puts ">>> 重试（reset_run 后重跑失败的那些）..."
+            }
+        }
+        return 0
+    }
+
     puts "\n>>> 开始综合..."
-    launch_runs synth_1 -jobs 8
-    wait_on_run synth_1
-    if {[get_property PROGRESS [get_runs synth_1]] ne "100%"} {
-        puts "\n!!! 综合失败"
+    if {![run_with_retry synth_1 {}]} {
+        puts "\n!!! 综合失败（已重试 3 次）"
         close_project
         exit 1
     }
     puts ">>> 综合完成"
 
     puts "\n>>> 开始实现..."
-    launch_runs impl_1 -to_step write_bitstream -jobs 8
-    wait_on_run impl_1
-    if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {
-        puts "\n!!! 实现失败"
+    if {![run_with_retry impl_1 [list -to_step write_bitstream]]} {
+        puts "\n!!! 实现失败（已重试 3 次）"
         close_project
         exit 1
     }
     puts ">>> 实现完成"
 
-    set wns [get_property SLACK [get_timing_paths -delay_type max]]
-    puts ">>> 时序余量 WNS = $wns ns"
-
+    # ⚠⚠ 顺序不能反：get_timing_paths 需要**已打开的设计**。
     open_run impl_1
+
+    if {[catch {
+        set wns [get_property SLACK [get_timing_paths -delay_type max]]
+        puts ">>> 时序余量 WNS = $wns ns"
+    } err]} {
+        puts "WARN: 取时序余量失败（不影响产物）: $err"
+    }
+
     report_utilization -file "$PROJ_DIR/utilization.rpt"
     puts ">>> 资源报告: $PROJ_DIR/utilization.rpt"
 }

@@ -13,12 +13,16 @@
 > | **BD 视频流水线** | `vivado/bd_video.tcl`（含预处理链 + Clocking Wizard + SCCB） | ✅ validate + 综合 + 实现 |
 > | **约束** | `vivado/constraints/video_io.xdc`（摄像头引脚已启用） | ✅ 综合验证生效 |
 > | **PS 侧驱动** | `sw/preproc_driver.c` | ✅ 主机自检 24/24 |
-> | **时序 / 比特流 / XSA** | 实现后实测 | ✅ **WNS +0.873 ns**，比特流 4.0 MB，XSA 755 KB |
-> | OV5640 寄存器表 | `rtl/ov5640_regs.v` | ⚠️ **占位**，需替换真表才能出图 |
+> | **时序 / 比特流 / XSA** | 实现后实测 | ✅ **WNS +0.265 ns**（`All user specified timing constraints are met`），比特流 4.0 MB，XSA 750 KB |
+> | **OV5640 寄存器表** | `rtl/ov5640_regs.v` | ⚠️ **已替换为真实配置表**（250 条，正点原子来源，固化 640×480 RGB565），**但未上板实测** |
 > | HDMI 输出 | TMDS 编码器 | ⚠️ 未做（端口暂用 DRC 豁免，见 `vivado/README.md`） |
 > | 板级实测 | — | ❌ 板子未到 |
+> 
+> ⚠ **WNS 逐次波动较大**：同一设计三次实现的实测为 +0.873 / +1.177 / **+0.265** ns。
+> 布线是随机过程，每次结果不同。**+0.265 仍收敛，但余量不大** ——
+> 后续若加逻辑（如 TMDS 编码器），要留意这条线。
 >
-> **一句话**：软件侧全部就绪，只差 OV5640 寄存器表 + 板子到货。
+> **一句话**：软件侧全部就绪（含 OV5640 配置表），只差板子到货 + 上板实测。
 > ⚠ 上板前必读 `docs/硬件采购清单.md` §3.3（引脚万用表复核）。
 >
 > ### 一键回归
@@ -46,6 +50,45 @@
 >
 > ⚠ **只有前两条加 `bash`** —— 它们自己就是 .sh 脚本。
 > 后三条是**外部可执行程序**，前面**不要**再加 `bash`：
+
+### 从零构建完整工程（综合 → 比特流 → XSA）
+
+上面那组命令只到「BD 构建 + validate」，**不出比特流**。
+要拿到可上板的 `.bit` 与 `.xsa`，走下面这条链：
+
+```bash
+# ① 【必须先做】跑 HLS，产出 IP 仓库
+#    create_project.tcl 需要 gesture_comp/solution1/impl/ip/component.xml，
+#    没有它脚本会**直接退出**（不是警告，是 exit 1）。
+vitis-run --mode hls --tcl src_hls/run_gesture.tcl
+
+# ② 建工程 → 建 BD → 综合 → 实现 → 比特流 → 导出 XSA
+vivado -mode batch -source vivado/create_project.tcl
+
+# ③ 只想先看 BD 是否合法（不跑综合，约 1 分钟）
+vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
+```
+
+**产物**（落在 `vivado/gesture_system/`）：
+
+| 文件 | 说明 |
+|---|---|
+| `gesture_system.xsa` | 含比特流 + `.hwh`，给 Vitis / PYNQ 用 |
+| `gesture_system/utilization.rpt` | 资源报告 |
+| `gesture_system/gesture_system.runs/impl_1/*.bit` | 比特流 |
+
+> ⚠ **`gesture_comp/`（HLS 产物）不在本仓库里** —— 它被 `.gitignore` 忽略，
+> 因为它完全可由 `run_gesture.tcl` 重建。所以**克隆下来必须先跑第 ① 步**。
+>
+> ⚠ 第 ② 步约 20–40 分钟。中途若报
+> `ERROR: [Common 17-354] Could not open 'C' for writing.` 或
+> `ERROR: [Common 17-1257] Failed to create directory 'C'.`，
+> 那是 OOC 综合的启动竞态（多个 Vivado 实例并发建临时目录）。
+> **它对产物无害，但会让 `wait_on_run` 抛错、脚本中断**，
+> 所以脚本里有自动重试（最多 3 次）。
+>
+> 若看到 `>>> synth_1 在第 N 次尝试后完成`，说明重试路径被触发了 ——
+> 那是预期行为，不是故障。
 >
 > ```bash
 > bash vivado -mode batch ...      # ✗ 报 "vivado: Is a directory"

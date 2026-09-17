@@ -126,6 +126,14 @@ create_bd_design $BD_NAME
 # =====================================================================
 set ps7 [create_bd_cell -type ip -vlnv xilinx.com:ip:processing_system7 ps7]
 
+# ⚠⚠ DDR 参数必须显式写，不能吃默认值。
+#
+#   2026-09-17 查实：本脚本原先**一条 DDR 参数都没有**，Vivado 于是套用了
+#   PS7 的出厂默认 —— `MT41J128M8 JP-125`。而 **PYNQ-Z2 板载是
+#   MT41K256M16RE-125（32-bit 总线）**，对不上。
+#
+#   后果的特征很隐蔽：**建工程、综合、实现、出比特流全部通过**，
+#   时序报告 WNS 还是正的。只有上板跑起来才暴露。
 set_property -dict [list \
     CONFIG.PCW_USE_M_AXI_GP0          {1} \
     CONFIG.PCW_USE_M_AXI_GP1          {0} \
@@ -136,6 +144,9 @@ set_property -dict [list \
     CONFIG.PCW_USE_FABRIC_INTERRUPT   {0} \
     CONFIG.PCW_EN_CLK0_PORT           {1} \
     CONFIG.PCW_FPGA0_PERIPHERAL_FREQMHZ {100} \
+    CONFIG.PCW_UIPARAM_DDR_PARTNO     {MT41K256M16 RE-125} \
+    CONFIG.PCW_UIPARAM_DDR_BUS_WIDTH  {32 Bit} \
+    CONFIG.PCW_UIPARAM_DDR_FREQ_MHZ   {533.333} \
 ] $ps7
 
 # ---- 存在性断言：早失败早定位 ----
@@ -146,6 +157,13 @@ foreach need {M_AXI_GP0 S_AXI_HP0 S_AXI_HP1 S_AXI_HP2 S_AXI_HP3 FCLK_CLK0} {
     }
 }
 puts ">>> PS 接口断言通过 (GP0 / HP0 / HP1 / HP2 / HP3)"
+
+# ---- DDR 断言：这类参数写错**不报错**，只会静默取默认值 ----
+set ddr_part [get_property CONFIG.PCW_UIPARAM_DDR_PARTNO $ps7]
+if {[string first "MT41K256M16" $ddr_part] < 0} {
+    error "DDR PARTNO 未生效，当前值 = '$ddr_part'（期望 MT41K256M16 RE-125）"
+}
+puts ">>> DDR 断言通过 ($ddr_part)"
 
 # =====================================================================
 #  3. 复位
@@ -287,10 +305,20 @@ puts ">>> Clocking Wizard 已例化（100 MHz -> 24 MHz XCLK）"
 #  ⚠ 寄存器配置表由 rtl/ov5640_regs.v 提供（按 tbl_addr 索引的常量 ROM）。
 #    独立成模块而不是塞进 BD 的原因：那张表上百项，写成 Tcl 常量列表
 #    既难维护也难核对。
-#    ⚠⚠ 该文件目前是**占位表**，必须替换成真实配置才能出图，
-#       详见文件头说明。
+#  ✅ 2026-09-17：已由"8 条占位值"替换为**真实配置表**。
+#     来源：正点原子 i2c_ov5640_rgb565_cfg.v，250 条，固化为 640x480 RGB565。
+#     详见 rtl/ov5640_regs.v 文件头。
 # ---------------------------------------------------------------------
 set sccb [create_bd_cell -type module -reference sccb_master sccb_0]
+
+# ⚠⚠ N_REGS 是**最容易漏的一处**：
+#    sccb_master.v 的参数默认值是 **64**，而配置表是 **250** 条。
+#    两者不一致时 sccb **配到一半就停下**（或越界读垃圾值），
+#    而且**没有任何报错** —— 症状是"摄像头毫无反应"。
+#    改了配置表的条目数，就必须同步改这里的 N_REGS。
+set_property -dict [list CONFIG.N_REGS {250}] $sccb
+puts ">>> sccb_0 的 N_REGS 已设为 250（与 ov5640_regs.v 一致）"
+
 set oreg [create_bd_cell -type module -reference ov5640_regs ov5640_regs_0]
 
 # IOBUF：SDA 是开漏双向线，需要三态缓冲。
