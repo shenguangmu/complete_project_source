@@ -651,7 +651,7 @@ proc run_with_retry {run_name launch_args {max_attempts 3}} {
 
 | 项 | 状态 |
 |---|---|
-| 板上时序余量 | ⚠ **RTL 级** WNS = **+0.265 ns**、WHS = +0.051 ns（2026-09-17 最后一次实现，`All user specified timing constraints are met`）。⚠ **逐次波动大**（+0.873 / +1.177 / +0.265，布线是随机的）。**板级实测仍未做** |
+| 板上时序余量 | ⚠ **RTL 级** WNS = **+0.265 ns**、WHS = +0.051 ns（2026-09-17 最后一次实现，`All user specified timing constraints are met`）。⚠ **逐次波动大**（+0.873 / +1.177 / +0.265，布线是随机的）。⚠⚠ **且该 WNS 属于 AMD `v_tc` IP 内部，不是本设计的余量**（见 `report/design.md` §4.5）；本项目 HLS 流水线余量 +43%。**板级实测仍未做** |
 | PS7 DDR 参数 | ✅ **已修复并重跑验证**（§1.4），XSA 里是 `MT41K256M16 RE-125` |
 | 摄像头模块选型 | ✅ **已定：PMOD-CAMERA v1.0，直插 Pmod A+B**（2026-09-17，§1.1） |
 | `io_xclk` 引脚约束 | ✅ **存在**（`video_io.xdc:183` = `Y18`，实现报告 `Constraint=FIXED`）。初版误判为"缺失"已更正（§1.2） |

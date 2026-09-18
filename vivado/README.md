@@ -664,7 +664,7 @@ set_property -dict [list \
 | 时钟/复位/AXI 接口断言 | ✅ 全部通过 |
 | **综合** | ✅ 通过 |
 | **实现（place & route）** | ✅ **完成** |
-| **时序收敛** | ✅ **WNS +0.265 ns**，TNS 0，0 个失败端点。⚠ **逐次波动大**：同一设计三次实现实测为 +0.873 / +1.177 / **+0.265** ns（布线是随机的）。余量不大，后续加逻辑要留意 |
+| **时序收敛** | ✅ **WNS +0.265 ns**，TNS 0，0 个失败端点。⚠ **逐次波动大**：同一设计三次实现实测为 +0.873 / +1.177 / **+0.265** ns（布线是随机的）。⚠⚠ **且这 0.265 属于 AMD `v_tc` IP 内部，不是本设计的余量** —— 见下方「时序余量」 |
 | **DRC** | ✅ 仅 Advisory（VDMA 内部 FIFO），无实质违规 |
 | **比特流** | ✅ **已生成**（4.0 MB，用 HDMI 临时豁免） |
 | **XSA** | ✅ 已导出（755 KB） |
@@ -685,8 +685,47 @@ set_property -dict [list \
 ### 时序余量
 
 ```
-cam_pclk    WNS +35.020 ns   ← 24 MHz，余量巨大
-clk_fpga_0  WNS  +0.265 ns   ← 100 MHz，这是关键路径（逐次波动 0.265~1.177）
+cam_pclk    WNS +35.020 ns   ← 24 MHz，余量巨大（也不是本设计，是 dvp_capture 的 FIFO 网）
+clk_fpga_0  WNS  +0.265 ns   ← 100 MHz，逐次波动 0.265~1.177
+```
+
+> ⚠⚠ **更正（2026-09-18）**：`clk_fpga_0` 这 0.265 ns **不属于本设计**。
+> 查布线报告的 10 条最差 setup 路径，**全部属于 AMD `bd_video_v_tc_0`
+> （视频时序控制器）IP 内部**：
+>
+> ```
+> Slack (MET) :   0.265ns
+>   Source / Target :  .../bd_video_v_tc_0/<hidden>/<hidden>/<hidden>
+>   Logic Levels    :  1  (LUT3=1)
+>   Data Path Delay :  9.764ns  (logic 0.642ns (6.6%)  route 9.122ns (93.4%))
+>   net (fo=433, routed)  9.122ns     ← 扇出 433 的高扇出网
+>   Timing Exception:  MaxDelay Path 10.000ns -datapath_only
+> ```
+>
+> **逻辑只占 0.64 ns、布线占 9.12 ns** → 是布线主导，不是逻辑深度；
+> 两端都在加密 IP 内部 → **改我们的 RTL/HLS 对它零影响**。
+>
+> **本项目自己的余量**：HLS csynth 估 `morph_stage` 腐蚀流水线
+> 可跑 **143.31 MHz**（目标 100 MHz）→ **余量 +43%**。
+>
+> 所以：**加逻辑不必因这个数畏手畏脚**，但仍应复查实现后报告。
+> 详见 [`../report/design.md` §4.5](../report/design.md)。
+
+**复现方式**（自己看一遍，别只信这里的结论）：
+
+```bash
+# 按 setup/hold 与时钟组分别统计布线后的最差路径
+python - <<'EOF'
+import re
+t=open('vivado/gesture_system/gesture_system.runs/impl_1/'
+       'bd_video_wrapper_timing_summary_routed.rpt',encoding='utf-8',errors='replace').read()
+for b in re.split(r'(?=Slack \((?:MET|VIOLATED)\))', t):
+    m=re.match(r'Slack \((MET|VIOLATED)\)\s*:\s*(-?[\d.]+)ns', b)
+    if not m: continue
+    g=re.search(r'Path Group:\s*(\S+)', b); pt=re.search(r'Path Type:\s*(\w+)', b)
+    if g and g.group(1)=='clk_fpga_0' and pt and pt.group(1).startswith('Setup'):
+        print(m.group(2), re.search(r'Source:\s*(\S+)', b).group(1)[:70])
+EOF
 ```
 
 ### 产物位置

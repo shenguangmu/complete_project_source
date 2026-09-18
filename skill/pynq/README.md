@@ -69,13 +69,35 @@ python gen_host_stub.py contract.json --ip my_accel_0 --lang test -o tb.py
 python golden_compare.py compare hw_out.bin golden.bin --shape 96x96 --dtype uint8
 
 # ② 从 HLS/实现报告抽指标，生成可对比的 markdown 表
-python golden_compare.py report --csynth csynth.rpt --impl impl.rpt
+python golden_compare.py report <模块>_csynth.rpt
+python golden_compare.py report csynth.rpt --baseline base.json --compare
 ```
 
 **为什么有用**：
 - "比对失败"如果不说清错在哪，等于没说 —— 本工具定位到**首个**不一致点
 - `csynth.rpt` 几百行，人肉找 II / Latency / 资源既慢又容易漏
 - **比赛要求的"优化前后对比表"就是这个 `report` 输出**
+
+### 失效条件（务必先看这一条）
+
+`report` **只认模块级报告的布局**（`Vitis HLS Report for '...'`），即
+`syn/report/<模块>_csynth.rpt` 那种。顶层 `syn/report/csynth.rpt`
+是**另一种布局**（`Synthesis Summary Report of '...'` + `Performance &
+Resource Estimates`），喂给它只会**静默解析出空表**（退出码仍为 0）。
+
+> 这个坑**实际踩过**：在真报告上跑，
+> 输出是个只有表头没有数据的空表，而退出码是 0 ——
+> 典型的"看起来成功、其实什么都没做"。
+> 所以这里加一个**显式告警**，见下方。
+
+**本项目的实测结论是**：想知道某个模块的 II / Fmax / 资源，
+直接把**那个模块的** `_csynth.rpt` 喂进来，例如
+
+```bash
+python golden_compare.py report \
+  gesture_comp/solution1/syn/report/morph_stage_Pipeline_VITIS_LOOP_578_4_VITIS_LOOP_579_5_csynth.rpt
+# → Achieved II = 1，Est. Fmax = 143.31 MHz，DSP = 55，LUT = 3064
+```
 
 **失效条件**：`compare` 要求两个文件**元素类型与数量一致**；
 reshape 的 `--shape` 必须与数据布局匹配（行优先）。

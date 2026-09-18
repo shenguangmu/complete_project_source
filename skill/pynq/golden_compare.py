@@ -420,6 +420,33 @@ def fmt_report(new, baseline=None):
                 lines.append(f"| {label} | {new[key]}{unit} |")
         lines.append("")
 
+    # ---- 解析空告警 ----
+    # ⚠ 实测踩过：把顶层 syn/report/csynth.rpt 喂进来时，
+    #   它的布局（`Synthesis Summary Report of ...` + `Performance &
+    #   Resource Estimates`）与本解析器期望的
+    #   （`Vitis HLS Report for '...'` + `Utilization Estimates`）
+    #   完全不同，于是**一个关键词都匹配不到**，
+    #   输出一张只有表头的空表 —— 而退出码是 0。
+    #   这正是本项目反复强调的"看起来成功、其实什么都没做"。
+    #   所以这里显式告警，别让空表被当成"指标全为零"。
+    _MEASURED = ("estimated_fmax_mhz", "latency_min", "interval_min",
+                 "lut", "dsp", "ff", "bram_18k")
+    if not any(new.get(k) is not None for k in _MEASURED) and not new.get("loops"):
+        lines.append("## ⚠ 未解析到任何指标")
+        lines.append("")
+        lines.append("**这个报告可能不是本工具支持的布局。**")
+        lines.append("")
+        lines.append("本解析器认的是**模块级**报告 "
+                     "(`syn/report/<模块>_csynth.rpt`，"
+                     "标题为 `Vitis HLS Report for '...'`)。")
+        lines.append("")
+        lines.append("顶层 `syn/report/csynth.rpt` 是另一种布局"
+                     "(`Synthesis Summary Report of ...`)，**本工具不认** —— ")
+        lines.append("它是**另一种报告**，不是解析失败，是格式不同。")
+        lines.append("顶层报告的指标请直接从该文件的 "
+                     "`Performance & Resource Estimates` 表读。")
+        lines.append("")
+
     # 循环级 II 明细
     if new.get("loops"):
         lines.append("## 循环明细")
