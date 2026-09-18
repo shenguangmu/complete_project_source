@@ -139,6 +139,8 @@ vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
 > | `docs/` | 架构契约、采购清单、GUI 复现指南 | [`docs/README.md`](docs/README.md) |
 > | `host/` | Python golden 参考实现 | — |
 > | `sim/` | 测试向量生成与比对 | — |
+> | **`skill/`** | **可复用技能包**（PYNQ 工具 / 踩坑清单 / 纠错方法论） | [`skill/README.md`](skill/README.md) |
+> | **`report/`** | **设计报告 + 大模型协作记录** | [`report/README.md`](report/README.md) |
 >
 > **推荐阅读顺序**：本文件 → `docs/架构与接口契约.md`（做什么、为什么）
 > → `docs/硬件采购清单.md`（买什么、怎么接）→ 各模块 README。
