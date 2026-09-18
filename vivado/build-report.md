@@ -1,0 +1,137 @@
+# 综合与实现报告
+
+> 赛题 §3.3.5.1 要求提交「综合与实现报告，含**资源占用、时钟频率与关键性能指标**」。
+>
+> **本文是摘要**；原始报告在工程目录下（未入版本库，可重跑生成）：
+>
+> | 原始报告 | 路径（重跑后生成） |
+> |---|---|
+> | 资源占用 | `vivado/gesture_system/utilization.rpt` ← **已入库** |
+> | 时序摘要（702 KB） | `vivado/gesture_system/gesture_system.runs/impl_1/bd_video_wrapper_timing_summary_routed.rpt` |
+> | DRC | `.../impl_1/bd_video_wrapper_drc_routed.rpt` |
+> | 功耗 | `.../impl_1/bd_video_wrapper_power_routed.rpt` |
+
+## 构建环境
+
+| 项 | 值 |
+|---|---|
+| 工具 | **Vivado 2025.2**（赛题允许 2026.1，本项目用 2025.2） |
+| 器件 | `xc7z020clg400-1`（PYNQ-Z2） |
+| 顶层 | `bd_video_wrapper` |
+| 综合/实现 | **0 error / 0 critical warning** |
+| 比特流 | 4,045,692 字节，`Bitgen Completed Successfully` |
+
+> ⚠ **重跑命令**：`vivado -mode batch -source vivado/create_project.tcl`
+> （前置：先跑 `vitis-run --mode hls --tcl src_hls/run_gesture.tcl`，
+> 因为 BD 需要 HLS 导出的 IP —— 详见根 `README.md`）
+
+---
+
+## 一、资源占用
+
+来自 `utilization.rpt`（Design State: **Routed**）：
+
+| 资源 | 用量 | 可用 | 占比 |
+|---|---|---|---|
+| Slice LUTs | **11,255** | 53,200 | **21.16%** |
+| └ LUT as Logic | 10,456 | 53,200 | 19.65% |
+| └ LUT as Memory | 799 | 17,400 | 4.59% |
+| Slice Registers | 14,810 | 106,400 | **13.92%** |
+| **DSPs**（DSP48E1） | **61** | 220 | **27.73%** |
+| **Block RAM Tile** | **25.5** | 140 | **18.21%** |
+| └ RAMB36/FIFO | 15 | 140 | 10.71% |
+| └ RAMB18 | 21 | 280 | 7.50% |
+
+> 数据取自 `vivado/gesture_system/utilization.rpt`（Design State: **Routed**）。
+>
+> ⚠ 该表曾写错（LUT 11,178 / 21.01%，抄自旧报告）。
+> **以仓库里 `utilization.rpt` 为准** —— 本表数字与它逐项核对过。
+
+**DSP 占用 27.73% 偏高，原因明确**：HLS 预处理链里的 `thresh_stage`
+用了**整数除法**，被映射到 DSP48E1 的除法器。
+**这是已知且可量化的优化空间** —— 若改用移位近似，
+DSP 占用可显著下降。见 `src_hls/README.md`。
+
+---
+
+## 二、时钟频率
+
+来自 `timing_summary_routed.rpt` 的 Clock Summary：
+
+| 时钟 | 周期 (ns) | 频率 (MHz) | 来源 |
+|---|---|---|---|
+| `clk_fpga_0` | 10.000 | **100.000** | PS7 `FCLK_CLK0` |
+| `bd_video_i/clk_wiz_xclk/inst/clk_in1` | 10.000 | 100.000 | 同上（CW 输入） |
+| `clk_out1_bd_video_clk_wiz_xclk_0` | 41.667 | **24.000** | Clocking Wizard 输出 → `io_xclk` |
+| `cam_pclk` | 41.667 | **24.000** | 摄像头 PCLK（外部输入） |
+| `clkfbout_...` | 50.000 | 20.000 | MMCM 反馈 |
+
+**两个时钟域**：系统 100 MHz 与摄像头 24 MHz（`cam_pclk`），
+跨域由 `async_fifo`（格雷码指针，标准 CDC 做法）处理。
+
+> Clocking Wizard 参数：100 MHz → 24 MHz，
+> **M=12 / D=1 / O=50，VCO = 1200 MHz**（非整数分频，必须用 MMCM）。
+
+---
+
+## 三、关键性能指标
+
+### 3.1 时序
+
+| 指标 | 值 | 判据 |
+|---|---|---|
+| **WNS**（最差建立裕量） | **+0.265 ns** | 正数 = 收敛 |
+| **WHS**（最差保持裕量） | **+0.051 ns** | 正数 = 收敛 |
+| TNS / THS | 0.000 / 0.000 | 0 个失败端点 |
+| 结论 | ✅ **`All user specified timing constraints are met.`** | |
+| 分析端点 | 40,239（建立）/ 35,302（保持） | |
+
+> ### ⚠ **WNS 逐次波动大 —— 这不是噪声，是必须说明的事实**
+>
+> 同一设计**三次实现**的实测：
+>
+> | 次 | WNS |
+> |---|---|
+> | 1 | +0.873 ns |
+> | 2 | +1.177 ns |
+> | 3 | **+0.265 ns** |
+>
+> **布线是随机过程**，每次结果不同。+0.265 仍收敛，但**余量不大**。
+>
+> **工程含义**：后续若增加逻辑（如 TMDS 编码器），
+> 要留意这条线 —— 余量不足以吸收大的改动。
+>
+> **不隐瞒这一点**：赛题 §3.3.4 要求"保证工程可由他人从零复现"。
+> 他人重跑**会得到不同的 WNS**，这是正常的，不是复现失败。
+
+### 3.2 吞吐量（设计目标，非实测）
+
+| 通路 | 速率 | 计算依据 |
+|---|---|---|
+| 显示通路（VDMA 写 DDR） | ≈ 18 MB/s | 640×480×2 B × 30 fps |
+| CNN 通路（预处理） | ≈ 6 MB/s | 614,400 B 读 + 9,216 B 写，10 fps |
+| HP 口分配 | 各占独立口 | HP1 写 / HP2 读 / HP3 预处理 |
+
+> ⚠ **这些是按设计参数推算的，不是实测值** —— 板子未到，无实测数据。
+> 上板后应补：实际帧率、DMA 吞吐、预处理单帧耗时。
+
+### 3.3 未验证项（如实列出）
+
+| 项 | 状态 |
+|---|---|
+| **板级实测** | ❌ **完全未做**（板子未到） |
+| OV5640 配置表能否出图 | ⚠ 已换真表（250 条），**未上板验证** |
+| PYNQ overlay 加载 | ⚠ 未验证（含镜像与 2025.2 的兼容性） |
+| 功耗实测 | ⚠ 只有 Vivado 估算（`power_routed.rpt`），无实测 |
+
+---
+
+## 四、DRC
+
+| 检查 | 结果 |
+|---|---|
+| 实现后 DRC | **0 Errors** |
+| `NSTD-1` / `UCIO-1` | 各 1 条 Warning —— 22 个 `hdmi_vid_out_*` 端口**未约束**（TMDS 编码器未做） |
+| 处理方式 | 走 `write_bitstream` 的 pre-hook 豁免（`constraints/hdmi_drc_hook.tcl`） |
+
+> ⚠ **这 22 个端口在比特流里是悬空的。上板时不要接 HDMI 线。**
