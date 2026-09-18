@@ -68,16 +68,84 @@
 
 ### 1.4 前人做过什么
 
-| 参考 | 复用了什么 | 区别 |
+#### 直接复用的工程资产
+
+| 来源 | 复用了什么 | 许可 |
 |---|---|---|
-| **Sobel 加速器**（本仓库 `legacy/sobel/`，已跑通） | **行缓存骨架**（3 行 BRAM + 3 级列移位寄存器） | 本作品把它重排到 96×96 上跑完整链 |
-| **PYNQ**（AMD 官方框架） | Overlay / MMIO / DMA 编程模型 | 直接采用 |
-| **OV5640 + PYNQ-Z2 开源项目** | 摄像头配置表来源、接线参考 | 见 `../docs/hardware-checklist.md` |
+| **Sobel 加速器**（本仓库 `legacy/sobel/`） | **行缓存骨架**（3 行 BRAM + 3 级列移位寄存器） | 本项目自有 |
+| **PYNQ**（AMD 官方框架） | Overlay / MMIO / DMA 编程模型 | BSD-3 |
+| [`xupsh/Pynq-CV-OV5640`](https://github.com/xupsh/Pynq-CV-OV5640) | OV5640 配置表来源、接线参考 | BSD-3 |
+| [`ambitously/zynq7020-image-enhancement`](https://github.com/ambitously/zynq7020-image-enhancement) | 正点原子 Zynq7020 + OV5640 的采集通路参考 | **无 LICENSE** |
 
-> ⚠ **待补**：本节需要补充**具体的学术/工业界前人工作引用**
-> （手势识别的 FPGA 实现、轻量 CNN 的边缘部署）。
-> 当前只列了工程层面复用的资产。
+> ⚠ `ambitously` 那个仓库**没有 LICENSE**，本项目**只参考其思路与接线，
+> 未复制其代码**。若后续要复用代码，须先联系作者。
 
+#### 学术前人工作
+
+> **核验说明**：以下文献均通过出版方页面或 DOI 核验过存在性。
+> **未核验通过的不列入**。
+
+**① 与本作品最接近：手势识别 + PYNQ-Z2 + ResNet**
+
+> Xiaoran Li, et al. *Hardware accelerator for high accuracy sign language
+> recognition with residual network based on FPGAs.*
+> **IEICE Electronics Express**, Vol.21, No.4, 2024.
+> DOI: [10.1587/elex.21.20230579](https://doi.org/10.1587/elex.21.20230579)
+
+- **平台**：**PYNQ-Z2**（与本作品同板）
+- **场景**：**手势/手语识别**（与本作品同场景）
+- **方法**：层间融合 + 8 位动态量化；通道并行 + 紧流水
+- **结果**：硬件推理精度 **98.87%**，总功耗 **2.136 W**
+
+**对本作品的意义**：它证明"**PYNQ-Z2 上跑手势识别 CNN 可行**"，
+并给出功耗量级（2.1 W）。本作品 §1.3① 里"动态功耗约 1.7 W"的
+判断与之同量级 —— 说明**把 CNN 放 PL 会顶到供电/散热上限**的顾虑是合理的。
+
+**② 最直接的方法论参照：PL vs 同一块板的 PS，量化加速比**
+
+> Kaijie Wei, Koki Honda, Hideharu Amano.
+> *An implementation methodology for Neural Network on a Low-end FPGA Board.*
+> **CANDAR 2020**, pp. 228-234.
+> DOI: [10.1109/CANDAR51075.2020.00039](https://doi.org/10.1109/CANDAR51075.2020.00039)
+
+- **平台**：**PYNQ-Z1**
+- **方法**：算法级降尺度 + HLS 硬件优化
+- **结果**：**相比同一块板上的 PYNQ ARM CPU，加速 22×**；
+  能效比 Xeon E5-2667 高 **3×**
+
+**对本作品的意义**：**它做的正是本项目 §4.4 待补的那个对比** ——
+PL 相对**同一块板的 PS** 的加速比。板到后本作品应做同样的测量，
+可与该文的 22× 对照。**这是本作品基线工作的直接方法论依据。**
+
+**③ 同板同摄像头、软硬件协同的参照**
+
+> Gang Wu, Jinglei Yang, Hao Yang.
+> *Real-time low-power binocular stereo vision based on FPGA.*
+> **Journal of Real-Time Image Processing**, 19(1): 29-39, 2022.
+> DOI: [10.1007/s11554-021-01158-z](https://doi.org/10.1007/s11554-021-01158-z)
+
+- **平台**：**PYNQ-Z2 @ 100 MHz**（与本作品同板同频）
+- **方法**：**软硬件协同划分** —— FPGA 做加速、ARM 做数据控制；
+  定点化降资源；再用**形态学后处理**补偿定点精度损失
+- **开源**：代码已在 GitHub 开放
+
+**对本作品的意义**（三条可直接对照的）：
+1. **"FPGA 加速 + ARM 控制"的分工**与本作品 §3.1 一致
+2. **定点化 + 后处理补偿精度**，与本作品"重排到 96×96 后靠 `gain`
+   补偿 Sobel 响应偏弱"（§3.3）是同一思路
+3. 它用**形态学后处理**，与本作品的 `morph_close` 对应
+
+#### 本作品的差异点
+
+| 维度 | 上述工作 | 本作品 |
+|---|---|---|
+| 边界 | **分层**：PL 做预处理加速 | **PL 全部**：采集→预处理→DDR 中继 |
+| 与下游解耦 | CNN 在 PL 内（①②）或同板 PS（③） | CNN 在**另一侧**，只依赖 DDR 里 96×96 buffer，**可独立开发** |
+| 算力取舍 | 尽量把 CNN 加速 | **明确不做 CNN 加速**，算力留给采集与预处理（§1.3①） |
+
+> **一句话**：前人做的是"**把 CNN 放上去加速**"；
+> 本作品做的是"**为 CNN 准备一份干净、低延迟的输入**"，
+> 并把两侧边界收敛成**一个可验证的数据契约**。
 ---
 
 ## 二、设计原理与功能框图
