@@ -353,7 +353,7 @@ puts ">>> SCCB 主控 + 寄存器表 + IOBUF 已例化"
 #  ⚠ 触发方式：帧触发 + 轮询（PS 控制）
 #    PS 检测到新帧 → 配置两个 DMA（S2MM 先武装）→ ap_start
 #    → 轮询 ap_done → 读结果 / 置 frame_ready
-#    见 docs/架构与接口契约.md §3.2
+#    见 docs/architecture-contract.md §3.2
 # =====================================================================
 set has_gesture 0
 if {$IP_REPO ne ""} {

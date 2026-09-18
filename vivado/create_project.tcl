@@ -409,7 +409,7 @@ puts "\n====================================================================="
 puts "  完成"
 if {$RUN_SYNTH} {
     puts "  下一步："
-    puts "    * 上板前必读 docs/硬件采购清单.md §3.3（引脚万用表复核）"
+    puts "    * 上板前必读 docs/hardware-checklist.md §3.3（引脚万用表复核）"
     puts "    * 驱动源码在 sw/，主机自检：bash sw/build_preproc_sim.sh"
 }
 puts "  原 Sobel 参照工程在本仓库 legacy/sobel/ 下"

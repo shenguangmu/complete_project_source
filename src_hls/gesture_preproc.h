@@ -2,7 +2,7 @@
  * @file    gesture_preproc.h
  * @brief   手势图像预处理链 —— 对外契约（寄存器映射 / 参数 / 共享类型）
  *
- * 本文件被四处共享，改之前先读 docs/架构与接口契约.md：
+ * 本文件被四处共享，改之前先读 docs/architecture-contract.md：
  *   1. HLS 综合源码      src_hls/gesture_preproc.cpp
  *   2. HLS C 仿真 TB     src_hls/tb_gesture.cpp
  *   3. 各阶段参考实现    src_hls/gesture_ref.cpp
@@ -49,7 +49,7 @@ typedef ap_uint<16> rgb565_t;
 /** 中间与输出像素 */
 typedef ap_uint<8> gray_t;
 
-/** 给 CNN 的输出尺寸（契约冻结，见 docs/架构与接口契约.md §3.1）。
+/** 给 CNN 的输出尺寸（契约冻结，见 docs/architecture-contract.md §3.1）。
  *  ⚠ 改动这里必须同步通知 CNN 侧。 */
 #define GESTURE_OUT_SIZE    96
 #define GESTURE_OUT_PIXELS  (GESTURE_OUT_SIZE * GESTURE_OUT_SIZE)
@@ -180,7 +180,7 @@ void roi_extract(hls::stream<axis_gray_t> &src,
  *   gain/roi_x/roi_y/roi_w/roi_h -> s_axi_control (AXI4-Lite)
  *
  * ⚠ 输出流的长度恒为 GESTURE_OUT_PIXELS (9216)，与输入分辨率无关；
- *   这是与 CNN 侧的契约，见 docs/架构与接口契约.md §3.1。
+ *   这是与 CNN 侧的契约，见 docs/architecture-contract.md §3.1。
  */
 void gesture_preproc(hls::stream<axis_rgb_t>  &src,
                      hls::stream<axis_gray_t> &dst,

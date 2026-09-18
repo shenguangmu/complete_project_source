@@ -16,7 +16,7 @@
 
 > **原 Sobel 的 `bd_sobel.tcl` 已移到 `legacy/sobel/vivado/`** ——
 > 它作为"已验证的参照"与本项目并存，但不再参与本工程的构建。
-> 原因见 `docs/架构与接口契约.md` §4.1。
+> 原因见 `docs/architecture-contract.md` §4.1。
 
 ## 构建与验证
 

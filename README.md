@@ -23,7 +23,7 @@
 > 后续若加逻辑（如 TMDS 编码器），要留意这条线。
 >
 > **一句话**：软件侧全部就绪（含 OV5640 配置表），只差板子到货 + 上板实测。
-> ⚠ 上板前必读 `docs/硬件采购清单.md` §3.3（引脚万用表复核）。
+> ⚠ 上板前必读 `docs/hardware-checklist.md` §3.3（引脚万用表复核）。
 >
 > ### 一键回归
 >
@@ -123,7 +123,7 @@ vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
 > ### 硬件方案
 >
 > **MUSE LAB PMOD-CAMERA v1.0**（标准 Pmod 双口，直插，零焊接）。
-> 引脚映射与上电前验证步骤见 `docs/硬件采购清单.md`。
+> 引脚映射与上电前验证步骤见 `docs/hardware-checklist.md`。
 > ⚠ 模块原理图是"镜像编号"，**上电前必须万用表复核**，否则可能烧板。
 >
 > ## 各目录说明
@@ -142,8 +142,13 @@ vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
 > | **`skill/`** | **可复用技能包**（PYNQ 工具 / 踩坑清单 / 纠错方法论） | [`skill/README.md`](skill/README.md) |
 > | **`report/`** | **设计报告 + 大模型协作记录** | [`report/README.md`](report/README.md) |
 >
-> **推荐阅读顺序**：本文件 → `docs/架构与接口契约.md`（做什么、为什么）
-> → `docs/硬件采购清单.md`（买什么、怎么接）→ 各模块 README。
+> ⚠ **目录结构说明**：本仓库的目录组织与赛题推荐结构不同
+> （按实现方式而非按 `src/`+`build/` 划分），
+> **对照表见 [`docs/README.md`](docs/README.md)**。
+> 项目自身目录与文件名**全部为纯英文**。
+>
+> **推荐阅读顺序**：本文件 → `docs/architecture-contract.md`（做什么、为什么）
+> → `docs/hardware-checklist.md`（买什么、怎么接）→ 各模块 README。
 >
 > ## 一句话说明分工
 >
@@ -202,7 +207,7 @@ vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
 插错方向会 **3V3/GND 反接烧板**。
 
 **上电前必须用万用表复核**，步骤见：
-- `docs/硬件采购清单.md` §3.3
+- `docs/hardware-checklist.md` §3.3
 - `vivado/constraints/video_io.xdc` 末尾的「上电前验证」章节
 
 上电后的排查顺序（能快速区分"FPGA 没工作"和"摄像头没配上"）：

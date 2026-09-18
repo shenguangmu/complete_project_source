@@ -251,7 +251,7 @@ gesture_comp/solution1/impl/ip/drivers/
 ### 还没做的
 
 1. **上板实测** —— 等板子与摄像头到货。
-   ⚠ 上板前必读 `docs/硬件采购清单.md` §3.3（引脚万用表复核）。
+   ⚠ 上板前必读 `docs/hardware-checklist.md` §3.3（引脚万用表复核）。
 2. ~~**`rtl/ov5640_regs.v` 的寄存器表** —— 占位表，上板前唯一的软件阻塞项~~
    ✅ **2026-09-17 已解决**：换为真实配置表（250 条，正点原子来源，
    固化为 640×480 RGB565）。⚠ **但仍未上板实测** —— 表内容对不对
@@ -261,4 +261,4 @@ gesture_comp/solution1/impl/ip/drivers/
 
 DDR 契约是 **96×96 uint8 灰度**（`PREPROC_OUT_PIXELS` = 9216 字节），
 地址由 PS 侧驱动告知，对拍用裸 `.bin` + `host/dump_frame.py`。
-详见 `docs/架构与接口契约.md` §3。
+详见 `docs/architecture-contract.md` §3。

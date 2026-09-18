@@ -55,7 +55,7 @@
 
 > ### ⚠ 为什么这条重要：文档曾经把它写错了
 >
-> `架构与接口契约.md` §二 曾经整节按 **ATK-OV5640（正点原子）** 写，
+> `architecture-contract.md` §二 曾经整节按 **ATK-OV5640（正点原子）** 写，
 > 理由是"板载 24 MHz 有源晶振，不需要 PL 提供 XCLK"（2026-09-15 的决策）。
 > **那个决策现在被推翻了** —— 回到 PMOD-CAMERA。
 >
@@ -280,7 +280,7 @@ for n in ["vdma", "v_tc", "dma_in", "dma_out", "gesture_preproc_0"]:
     print(f"{n:20s} {ip}")
 ```
 
-**【已核实】** `.hwh` 里的地址是这个（**不是** `docs/架构与接口契约.md` §2.14 写的 `0x4300_0000`/`0x43C0_0000`，那是原 Sobel 工程的残留）：
+**【已核实】** `.hwh` 里的地址是这个（**不是** `docs/architecture-contract.md` §2.14 写的 `0x4300_0000`/`0x43C0_0000`，那是原 Sobel 工程的残留）：
 
 | IP | BASE |
 |---|---|
@@ -323,18 +323,18 @@ ol = Overlay("gesture_system.bit", ignore_version=True)
 
 **②③ 不需要摄像头**，所以**摄像头还没到货也能先做掉** —— 现在就可以做。
 
-**注意本文的 § 编号和别的文档会撞车**（比如 `架构与接口契约.md` 也有 §5）。
+**注意本文的 § 编号和别的文档会撞车**（比如 `architecture-contract.md` 也有 §5）。
 下文凡是引用项目内的其他文档，一律写成 `文件名 §x.y`；
 只写 `§x.y` 的都是指**本指南**。引用其他文档的地方是：
 
 | 写在哪 | 指的是 |
 |---|---|
-| §1.1 表格「出处」列 | `硬件采购清单.md` 第三章、`架构与接口契约.md` 第二章 |
-| §4 表格上方的注 | `架构与接口契约.md` §2.14（那里写的地址**已过时**，勿用） |
-| §4 引用契约 | `架构与接口契约.md` §3.1 |
-| §5.2 启动顺序 | `docs/架构与接口契约.md` §4.3 |
-| §5.3 上方 | `docs/硬件采购清单.md` 第二章（工具采购建议） |
-| §6.1 表格「出处」列 | skill `09-pitfalls.md` 的 C1/C3/E1、`GUI复现指南_手势识别系统.md` §2.9 |
+| §1.1 表格「出处」列 | `hardware-checklist.md` 第三章、`architecture-contract.md` 第二章 |
+| §4 表格上方的注 | `architecture-contract.md` §2.14（那里写的地址**已过时**，勿用） |
+| §4 引用契约 | `architecture-contract.md` §3.1 |
+| §5.2 启动顺序 | `docs/architecture-contract.md` §4.3 |
+| §5.3 上方 | `docs/hardware-checklist.md` 第二章（工具采购建议） |
+| §6.1 表格「出处」列 | skill `09-pitfalls.md` 的 C1/C3/E1、`gui-reproduction-guide.md` §2.9 |
 
 ---
 
@@ -365,7 +365,7 @@ print("物理地址:", hex(buf.physical_address))
 DDR(输入 640×480 RGB565) ─► dma_in(MM2S) ─► gesture_preproc ─► dma_out(S2MM) ─► DDR(96×96)
 ```
 
-**⚠ 启动顺序不能反**（`docs/架构与接口契约.md` §4.3）：
+**⚠ 启动顺序不能反**（`docs/architecture-contract.md` §4.3）：
 
 ```
 ① 填输入数据 + flush cache
@@ -435,7 +435,7 @@ python host/dump_frame.py show board.bin --png out.png
 ### 5.3 摄像头信号逐级排查（**有了示波器/逻辑分析仪再做**）
 
 > ⚠ 没有示波器或逻辑分析仪的话，这一节做不了。
-> `docs/硬件采购清单.md` §二自己写了：
+> `docs/hardware-checklist.md` §二自己写了：
 > "没有它，只能靠猜和改代码，调试周期会从半天变成一周"。
 > **这是本项目最值得买的一个 ¥40 工具。**
 

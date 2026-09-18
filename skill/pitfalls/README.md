@@ -14,7 +14,7 @@
 | 加了"失败重试"，日志显示重试了但同一秒返回 | **P2** |
 | 脚本跑到最后突然 `No open design`，产物缺失 | **P3** |
 | OOC 综合日志里出现 `Failed to create directory 'C'` | **P4** |
-| 综合通过但上板数据不对 | 见 `docs/上板测试指南.md` 的分级验证 |
+| 综合通过但上板数据不对 | 见 `docs/board-bringup-guide.md` 的分级验证 |
 | HLS 相关（pragma 被丢、csim 假成功…） | 见附录索引 |
 
 ---
