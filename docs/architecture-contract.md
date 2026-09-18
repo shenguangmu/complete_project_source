@@ -357,7 +357,7 @@ PL 做每像素一次操作的带宽型任务，PS 做需要循环迭代与权�
 | SCCB 主控 | ✅ 已写并验证（`rtl/sccb_master.v`，TB PASSED 10/10） |
 | HLS 预处理链 | ✅ 已综合（`gesture_preproc`，`user:hls:gesture_preproc:1.0`） |
 | 建工程→综合→实现→比特流→XSA | ✅ **2026-09-17 完整跑通**（0 error / 0 critical warning） |
-| 时序 | ✅ `All user specified timing constraints are met`，**WNS = +1.177 ns**（RTL 级） |
+| 时序 | ✅ `All user specified timing constraints are met`，**WNS = +0.265 ns**、WHS = +0.051 ns（RTL 级）。⚠ 逐次波动大（+0.873 / +1.177 / +0.265）。⚠⚠ **且该 WNS 属于 AMD `v_tc` IP 内部，不是本设计的余量**（见 `report/design.md` §4.5）；本项目 HLS 流水线余量 **+43%**（csynth 估 143.31 MHz / 目标 100 MHz） |
 | PS7 DDR 参数 | ✅ 已修正为 `MT41K256M16 RE-125` 并重跑验证 |
 | 摄像头选型 | ✅ **已定（2026-09-17）：PMOD-CAMERA v1.0，直插 Pmod A+B** |
 | **`ov5640_regs.v` 寄存器表** | ❌ **已替换为真表但未上板实测**（250 条，正点原子来源，固化为 640x480） |
