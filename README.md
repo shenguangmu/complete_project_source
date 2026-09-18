@@ -43,6 +43,14 @@
 > GESTURE_COSIM=1 vitis-run --mode hls --tcl src_hls/run_gesture.tcl
 > ```
 >
+> ### 自动化回归（GitHub Actions）
+>
+> 上面**前两条**（纯 RTL 回归 + 预处理驱动主机自检）已挂到 CI，
+> 每次 push / PR 自动跑；结果见仓库 **Actions** 页。这两个都**不需要
+> license、不需要板子、秒级完成**，所以适合自动跑。
+>
+> 需要 Vivado/Vitis 的那几条（HLS、BD、综合）**没有**进 CI ——
+> 跑一次要几十分钟且需要 license，代价不成比例。
 > ⚠ **640×480 下 cosim 要跑很久**（实测仿真时间约 1.3 秒 → 实际数十分钟）。
 > 想快速验证，把 `src_hls/gesture_preproc.h` 的
 > `GESTURE_IN_WIDTH/HEIGHT` 临时改成 64，TB 会自适应。
@@ -107,7 +115,7 @@ vivado -mode batch -source vivado/create_project.tcl -tclargs --synth 0
 > | 命令 | 依赖 | 耗时 |
 > |---|---|---|
 > | `run_iverilog.sh` | **iverilog**（脚本自己找 `C:/iverilog/bin`） | 秒级 |
-> | `build_preproc_sim.sh` | **Vitis 自带的 clang**（脚本已写死路径） | 秒级 |
+> | `build_preproc_sim.sh` | **任一 C 编译器**：优先 Vitis clang，找不到就退回 PATH 上的 `cc/gcc/clang` | 秒级 |
 > | `vitis-run` | 需在 PATH 里（Vitis 安装时导出的环境） | 1–2 分钟 |
 > | `vivado` | 需在 PATH 里 | BD 约 1 分钟；综合约 5–10 分钟 |
 >

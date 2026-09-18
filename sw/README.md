@@ -10,6 +10,15 @@ bash sw/build_preproc_sim.sh     # 预处理链驱动的主机自检
 
 判定标准是 `*** PREPROC DRIVER SIM PASSED ***`。
 
+**编译器依赖**：优先用 Vitis 自带的 clang；找不到就退回 PATH 上的
+`cc` / `gcc` / `clang`。**不需要板子，不需要 license**，所以这条
+也已挂进 GitHub Actions（每个 push 自动跑）。
+
+> ⚠ 这份自检**只验证驱动的控制流**（地址对齐、参数检查、寄存器写序、
+> 超时路径），`preproc_sim.c` 里的执行函数是**朴素 C 实现**，
+> **不是 HLS IP 的逐位等价物** —— 它不校验算法结果。
+> 真机行为仍须等板卡实测。
+
 ---
 
 ## 只有一套驱动

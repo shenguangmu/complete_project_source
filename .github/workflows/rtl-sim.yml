@@ -5,18 +5,20 @@ name: RTL simulation
 # =====================================================================
 #
 #  1) 本项目有两套「秒级、无需 license」的回归，但**都要手动记得跑**：
-#         bash rtl/run_iverilog.sh       # 纯 RTL（3 个 TB）
+#         bash rtl/run_iverilog.sh         # 纯 RTL（3 个 TB）
+#         bash sw/build_preproc_sim.sh     # PS 驱动主机自检
 #     忘了跑，改了 RTL 也不会有人拦。
 #
 #  2) 赛题 §3.3.4 明确要求「保证工程可由他人从零复现」。
 #     每次 push 的自动回归记录，就是**可复现性的直接证据** ——
 #     比在报告里写「我们验证过了」有力得多。
 #
-#  ⚠ 为什么**只跑 RTL 那一个**，不跑 sw/build_preproc_sim.sh：
-#     `sw/build_preproc_sim.sh` 写死了找 Vitis 自带的 `clang.exe`（Windows 专有），
-#     在 Ubuntu runner 上必然失败。它的三个 .c 文件本身没有
-#     Windows 依赖（实测 grep 过），只是脚本没做跨平台 fallback。
-#     若要纳入 CI，得先给脚本加 `cc` 回退分支 —— 那是另一件事。
+#  ─── sw 那个脚本怎么进得来（2026-09 追加） ───
+#     它原先在 Ubuntu 上必红：探测写死了 `clang.exe`（Windows 专有）。
+#     给脚本加了一层「Vitis clang → PATH 上的 cc/gcc/clang」的回退
+#     （三个 .c 实测无 Windows 依赖，目标侧 xil_* 头文件被
+#     #ifdef PREPROC_SIM_BUILD 隔开），Windows 本地行为一字未变。
+#     所以下面两个 job 都是真的能跑通的，不是摆样子。
 #
 #  ⚠ 诚实的边界：本 CI **没有**在 Windows 上验证过（GitHub runner 是
 #     Ubuntu，本机 Git Bash 又不带 gcc）。第一次 push 后请看 Actions
@@ -59,5 +61,49 @@ jobs:
           bash rtl/run_iverilog.sh 2>&1 | tee /tmp/rtl.log
           if ! grep -q 'ALL RTL TESTS PASSED' /tmp/rtl.log; then
             echo "::error::日志里没有 '*** ALL RTL TESTS PASSED ***' —— 回归未真正通过"
+            exit 1
+          fi
+
+  # ⚠ PS 驱动自检与 RTL 是**两件独立的事**，所以拆成两个 job：
+  #   谁红了看一眼 job 名就知道是哪一侧。
+  #   （代价是多一次 checkout + apt，几秒钟的事。）
+  sw-sim:
+    name: PS 驱动主机自检（C）
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 本脚本不依赖 Vitis —— 目标侧的 xil_* 头文件被
+      # #ifdef PREPROC_SIM_BUILD 隔开，仿真模式只用标准 C 库。
+      - name: 安装 C 编译器
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential
+
+      - name: 版本确认（写进日志，便于复现）
+        run: cc --version | head -1
+
+      # ⚠ 判据是脚本自己的通过标记，不是退出码 —— 同 rtl-sim 的理由。
+      #
+      #   顺带说明：脚本的退出码**已经是可信的**（它 return 的是
+      #   g_fail==0 ? 0 : 1，不是无条件 0）。再加一道 grep 是**冗余**，
+      #   但代价只有一行，而本项目确实吃过「返回码 0 但流程已断」的亏，
+      #   所以宁可多一道。
+      #
+      #   [!] 这份自检的**边界**（别把它当上板证明）：
+      #       - 它验证的是驱动的**控制流**：地址对齐检查、参数检查、
+      #         寄存器写序、超时/重试路径
+      #       - `preproc_sim.c` 里的执行函数是**朴素 C 实现**，
+      #         不是 HLS 那个 IP 的逐位等价物 —— 它**不校验算法结果**
+      #       - 所以 `[6] 输出: 非零像素 4992/9216` 这类数字只证明
+      #         "数据流没断"，不证明 PL 侧算得对
+      #       真机行为仍须等板卡到位实测。
+      - name: 跑 PS 驱动自检并校验通过标记
+        run: |
+          set -o pipefail
+          bash sw/build_preproc_sim.sh 2>&1 | tee /tmp/sw.log
+          if ! grep -q 'PREPROC DRIVER SIM PASSED' /tmp/sw.log; then
+            echo "::error::日志里没有 '*** PREPROC DRIVER SIM PASSED ***' —— 自检未真正通过"
             exit 1
           fi
