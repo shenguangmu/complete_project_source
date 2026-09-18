@@ -280,7 +280,8 @@ S2MM 必须先武装，否则预处理输出的第一拍没有接收方。
 | Block RAM | 25.5 | 18.21% |
 | DSPs | 61 | 27.73% |
 
-DSP 偏高来自 `thresh_stage` 的整数除法，优化方式见 `src_hls/README.md`。
+DSP 偏高**不在** `thresh_stage`（它只占 2 个）——实测大头在 `morph_stage`（56 个）。
+降 DSP 的尝试失败过（代价是 II 退化），详见 `src_hls/README.md`。
 
 ---
 

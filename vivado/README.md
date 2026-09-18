@@ -82,7 +82,8 @@ vivado -mode batch -source vivado/test_video_io_xdc.tcl  # 约束 + 综合
 | DSPs | 61 | 27.73% |
 
 > 含预处理链（gesture_preproc + 两个 DMA）与 SCCB/Clocking Wizard。
-> DSP 偏高来自 `thresh_stage` 的整数除法，优化方式见 `src_hls/README.md`。
+> DSP 偏高**不在** `thresh_stage`（它只占 2 个）——实测大头在 `morph_stage`（56 个）。
+> 降 DSP 的尝试失败过，详见 `src_hls/README.md`。
 
 ---
 
@@ -224,7 +225,8 @@ PS 侧流程：
 
 两个时钟域：`clk_fpga_0`（100 MHz）+ `cam_pclk`（24 MHz，来自摄像头）。
 
-> **DSP 占 27.73% 偏高**，来源是 `thresh_stage` 里每像素一次的整数除法
+> **DSP 占 27.73% 偏高**，来源**不是** `thresh_stage`（它只占 2 个）——
+> 实测大头是 `morph_stage` 的 56 个（占全设计 79%）
 > （`sum / 9216` 被映射成 DSP 乘法器）。若后续资源紧张，
 > 可改成"乘 1/9216 的定点倒数再右移"，能省下大部分 DSP。
 > 详见 `src_hls/README.md`。
