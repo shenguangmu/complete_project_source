@@ -1,0 +1,63 @@
+name: RTL simulation
+
+# =====================================================================
+#  为什么有这个 CI
+# =====================================================================
+#
+#  1) 本项目有两套「秒级、无需 license」的回归，但**都要手动记得跑**：
+#         bash rtl/run_iverilog.sh       # 纯 RTL（3 个 TB）
+#     忘了跑，改了 RTL 也不会有人拦。
+#
+#  2) 赛题 §3.3.4 明确要求「保证工程可由他人从零复现」。
+#     每次 push 的自动回归记录，就是**可复现性的直接证据** ——
+#     比在报告里写「我们验证过了」有力得多。
+#
+#  ⚠ 为什么**只跑 RTL 那一个**，不跑 sw/build_preproc_sim.sh：
+#     `sw/build_preproc_sim.sh` 写死了找 Vitis 自带的 `clang.exe`（Windows 专有），
+#     在 Ubuntu runner 上必然失败。它的三个 .c 文件本身没有
+#     Windows 依赖（实测 grep 过），只是脚本没做跨平台 fallback。
+#     若要纳入 CI，得先给脚本加 `cc` 回退分支 —— 那是另一件事。
+#
+#  ⚠ 诚实的边界：本 CI **没有**在 Windows 上验证过（GitHub runner 是
+#     Ubuntu，本机 Git Bash 又不带 gcc）。第一次 push 后请看 Actions
+#     页面的实际结果，红了就照日志修。
+# =====================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:        # 允许手动触发
+
+jobs:
+  rtl-sim:
+    name: RTL 回归（iverilog）
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ubuntu 源里的 iverilog 版本够用（TB 用的是 -g2012 标准语法）
+      - name: 安装 iverilog
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq iverilog
+
+      - name: 版本确认（写进日志，便于复现）
+        run: iverilog -V 2>&1 | head -2
+
+      # ⚠ 跑一次，同时做两件事：留完整日志 + 显式校验通过标记。
+      #
+      #   为什么不用「脚本退出码」就够了：
+      #   本项目的经验是 **"脚本跑完" 不等于 "测试通过"**
+      #   （见 skill/pitfalls 的模式 2：返回码 0 但流程已断）。
+      #   所以显式 grep 通过标记，宁可多一道。
+      - name: 跑 RTL 回归并校验通过标记
+        run: |
+          set -o pipefail
+          bash rtl/run_iverilog.sh 2>&1 | tee /tmp/rtl.log
+          if ! grep -q 'ALL RTL TESTS PASSED' /tmp/rtl.log; then
+            echo "::error::日志里没有 '*** ALL RTL TESTS PASSED ***' —— 回归未真正通过"
+            exit 1
+          fi
