@@ -107,3 +107,34 @@ jobs:
             echo "::error::日志里没有 '*** PREPROC DRIVER SIM PASSED ***' —— 自检未真正通过"
             exit 1
           fi
+
+  # ⚠ 第三个 job：host/ 侧的 PYNQ 驱动离线自检。
+  #   它覆盖的是 gesture_overlay.py 里**与硬件无关**的那部分：
+  #   参数检查 + 寄存器编码。2026-09-18 在那里发现过一个静默 bug
+  #   （有符号阈值偏置写成 8 位补码，IP 读回来从 -8 变 +248，
+  #    输出全黑且不报错）—— C 驱动做对了，Python 侧没人查。
+  #   这类"不需要板子、纯逻辑"的东西必须进 CI，否则永远不会被发现。
+  overlay-offline:
+    name: PYNQ 驱动离线自检（Python）
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # ⚠ 本测试**不 import pynq** —— gesture_overlay.py 把 pynq 的导入
+      #   放在 try/except 里，所以能在没有 PYNQ 环境的 runner 上静态检查。
+      - name: 版本确认（写进日志，便于复现）
+        run: python --version
+
+      - name: 跑离线自检并校验通过标记
+        run: |
+          set -o pipefail
+          python host/test_overlay_offline.py 2>&1 | tee /tmp/overlay.log
+          if ! grep -q 'OVERLAY OFFLINE TESTS PASSED' /tmp/overlay.log; then
+            echo "::error::日志里没有 '*** OVERLAY OFFLINE TESTS PASSED ***' —— 自检未真正通过"
+            exit 1
+          fi

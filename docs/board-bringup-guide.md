@@ -323,6 +323,23 @@ ol = Overlay("gesture_system.bit", ignore_version=True)
 
 **②③ 不需要摄像头**，所以**摄像头还没到货也能先做掉** —— 现在就可以做。
 
+> ### ✅ ②③ 已脚本化：`host/bringup_check.py`
+>
+> 上面 ②③ 两步的代码**不用手敲**了 —— 已做成可直接跑的脚本：
+>
+> ```bash
+> python3 host/bringup_check.py            # 跑 ②③
+> python3 host/bringup_check.py --step 2   # 只跑 DDR 自检
+> python3 host/bringup_check.py --json r.json   # 结果落盘（报告用）
+> ```
+>
+> 判定：`*** BRINGUP CHECK PASSED ***`。
+> 它会在每一步给出**针对性的排查提示**（比如输出全黑时列出三个常见原因）。
+>
+> ⚠ **④~⑧ 需要示波器/逻辑分析仪，脚本不做** ——
+> 那些是模拟信号的逐级排查，没法自动化。
+> 但 ②③ 脚本化之后，**摄像头插上时只剩一条线要查**。
+
 **注意本文的 § 编号和别的文档会撞车**（比如 `architecture-contract.md` 也有 §5）。
 下文凡是引用项目内的其他文档，一律写成 `文件名 §x.y`；
 只写 `§x.y` 的都是指**本指南**。引用其他文档的地方是：

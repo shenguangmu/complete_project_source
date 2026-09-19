@@ -15,6 +15,7 @@
 | 脚本跑到最后突然 `No open design`，产物缺失 | **P3** |
 | OOC 综合日志里出现 `Failed to create directory 'C'` | **P4** |
 | **改了源码，报告里的旧数字还在，没人发现** | **P5** |
+| **测试脚本打了 [FAIL] 却报 PASSED** | **P6** |
 | 综合通过但上板数据不对 | 见 `docs/board-bringup-guide.md` 的分级验证 |
 | HLS 相关（pragma 被丢、csim 假成功…） | 见附录索引 |
 
@@ -237,9 +238,60 @@ git status --short src_hls/
 
 ---
 
+## P6 · 测试脚本打了 `[FAIL]` 却报 `PASSED`
+
+**现象**：自检脚本明明打印了一行 `[FAIL] ...`，
+最后汇总却是 `*** TEST PASSED ***`，退出码 0。CI 于是放行。
+
+**根因**：失败路径**没有走计数器**。典型写法：
+
+```python
+def step2():
+    try:
+        from pynq import allocate
+    except ImportError:
+        print("    [FAIL] 连 pynq 都 import 不了")
+        return False          # ← 打印了，但 _failed 没加一
+```
+
+主流程只在 `_failed` 里统计，而这个早退分支跳过了它 ——
+**"报错"和"记账"是两条独立的路径，只做了前者。**
+
+**本项目实际发生的**：写 `host/bringup_check.py` 时第一版就是这样，
+在 PC 上试跑 `--step 2` 才抓到（无板环境必然 import 失败，正好走这条分支）。
+**如果没有"无板也能跑一遍"这一步，这个 bug 会一直留到上板那天**，
+而且表现是"明明失败却告诉你成功"—— 比直接崩掉危险得多。
+
+**对策**：**所有失败路径都走同一个记账函数**，不允许裸 `return False`：
+
+```python
+def _fail():
+    global _failed
+    _failed += 1
+    return False
+
+# 所有早退分支统一写成
+    print("    [FAIL] ...")
+    return _fail()
+```
+
+**验证命令**（这条才是关键 —— 光看代码看不出来）：
+
+```bash
+# 故意制造一个必然失败的场景，看汇总结论对不对
+python host/bringup_check.py --step 2   # 在无 pynq 的 PC 上跑
+# 期望：打印 FAILED，且 echo $? == 1
+```
+
+> **一般化的教训**：**测试脚本本身也要被测。**
+> 而且最省事的测法是**让它跑一个必然失败的场景** ——
+> 正常路径谁都会测，**失败路径才是没人走的那条**。
+
+---
+
 ## 附录：更完整的清单
 
-本目录只列了**"工具流程全过、只有上板才暴露"**这一类中最典型的 5 条。
+本目录只列了**"工具流程全过、只有上板才暴露"**这一类中最典型的 6 条。
 更完整的 15 条（HLS 接口/pragma、Vitis 命令行、BD/Tcl、Zynq 协同、环境噪声）
 见项目仓库 `vivado/README.md` 的「踩过的 19 个坑」一节，
 其中前 15 条按 A–E 五类组织。

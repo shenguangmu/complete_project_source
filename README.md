@@ -37,11 +37,20 @@
 > ```bash
 > bash rtl/run_iverilog.sh                             # RTL（秒级，无需 license）
 > bash sw/build_preproc_sim.sh                         # 预处理驱动主机自检
+> python host/test_overlay_offline.py                  # PYNQ 驱动离线自检（无需板子）
 > vitis-run --mode hls --tcl src_hls/run_gesture.tcl   # HLS csim + csynth
 > vivado -mode batch -source vivado/test_bd_video.tcl  # BD 构建 + validate
 > vivado -mode batch -source vivado/test_video_io_xdc.tcl  # XDC + 综合
 > ```
 >
+> **前三条不需要板子、不需要 license，已挂进 CI**（见下）。
+>
+> **板到了之后**，②③ 两步（DDR 自检 + 只跑预处理链，**不需要摄像头**）
+> 用这个脚本一次跑完：
+>
+> ```bash
+> python3 host/bringup_check.py          # 在 PYNQ 板上跑
+> ```
 > **加跑 C/RTL 协同仿真**（验证综合后的 RTL 行为与 C 一致，慢）：
 >
 > ```bash
@@ -50,9 +59,20 @@
 >
 > ### 自动化回归（GitHub Actions）
 >
-> 上面**前两条**（纯 RTL 回归 + 预处理驱动主机自检）已挂到 CI，
-> 每次 push / PR 自动跑；结果见仓库 **Actions** 页。这两个都**不需要
-> license、不需要板子、秒级完成**，所以适合自动跑。
+> 上面**前三条**（纯 RTL 回归 / 预处理驱动主机自检 / PYNQ 驱动离线自检）
+> 已挂到 CI，每次 push / PR 自动跑；结果见仓库 **Actions** 页。
+> 这三个都**不需要 license、不需要板子、秒级完成**，所以适合自动跑。
+>
+> | job | 覆盖 |
+> |---|---|
+> | `rtl-sim` | 3 个 RTL 测试台（iverilog） |
+> | `sw-sim` | PS 驱动控制流（纯 C） |
+> | `overlay-offline` | PYNQ 驱动的参数检查与寄存器编码（纯 Python） |
+>
+> 第三个 job 是 2026-09-18 加的 —— 因为那天在那里发现了一个
+> **静默 bug**（有符号阈值偏置写成 8 位补码，IP 读回来从 -8 变 +248，
+> 输出全黑且不报错）。**这类"不需要板子、纯逻辑"的东西必须进 CI**，
+> 否则永远不会被发现。
 >
 > 需要 Vivado/Vitis 的那几条（HLS、BD、综合）**没有**进 CI ——
 > 跑一次要几十分钟且需要 license，代价不成比例。

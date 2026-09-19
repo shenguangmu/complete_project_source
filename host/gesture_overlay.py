@@ -101,10 +101,72 @@ DMA_CR_RESET   = 0x0004
 DMA_SR_HALTED  = 0x0001
 DMA_SR_IDLE    = 0x0002
 
-# 默认算法参数（与驱动一致）
+# ⚠⚠ 有符号参数写进 32 位 AXI-Lite 寄存器时的**位宽**问题（2026-09-18 修的 bug）
+#
+#   `thresh_offset` 在 HLS 侧是 `int`（s_axilite，32 位）。所以：
+#
+#     要传 -8  →  写 0xFFFFFFF8  →  IP 按 int32 读回 -8   ✅
+#     不能写 0x000000F8，那 IP 读回来是 **+248**，阈值被抬高，
+#     输出**全黑** —— 而且 ap_done 照常置位，**不报任何错**。
+#
+#   本文件原先写的是 `-8 & 0xFF`（8 位补码），正是后一种。
+#   讽刺的是那行注释写的是"有符号转补码"—— 思路对，**位宽错**。
+#
+#   同一个坑，C 驱动 `sw/preproc_driver.c` 做对了：
+#       (uint32_t)(int32_t)dev->thresh_offset   →  0xFFFFFFF8
+#   它的主机自检 `main_preproc.c` 第 4 项专门验这个，
+#   而且注释里明确写了"直接 (uint32_t)(-8) 会变成 0xFFFFFFF8，
+#   IP 侧当成巨大的正数……表现为输出全黑或全白"。
+#   **C 侧写对了却少有人注意，Python 侧写错了却没人查 —— 两边都要核。**
 DEFAULT_THRESH_MODE   = 1
-DEFAULT_THRESH_OFFSET = -8 & 0xFF   # 有符号转补码
+DEFAULT_THRESH_OFFSET = -8          # ⚠ 保持有符号！写入时按 32 位补码转换
 DEFAULT_GAIN          = 256
+
+
+def _as_i32(v):
+    """把有符号整数转成 32 位补码（写入 s_axilite 寄存器的正确方式）。
+
+    ⚠ 不要用 `v & 0xFF` —— AXI-Lite 寄存器是 32 位，
+      8 位补码会让 IP 把负数读成大的正数。
+    """
+    return v & 0xFFFFFFFF
+
+
+def check_config(thresh_mode, thresh_offset, gain,
+                 roi_x, roi_y, roi_w, roi_h):
+    """参数检查 + ROI 居中补齐。
+
+    **纯函数，不碰硬件** —— 所以可以在 PC 上离线测
+    （见 `host/test_overlay_offline.py`）。
+    这一点是有意的：这些检查是"写进硬件之前"的最后一道闸，
+    不该因为"没板子就跑不了"而失去回归覆盖。
+
+    ⚠ 各条判据与 `sw/preproc_driver.c` 的 `preproc_config()` 逐条对齐。
+      改这里就要同步改那里，反之亦然。
+
+    返回补齐后的 dict；非法值抛 ValueError。
+    """
+    if thresh_mode not in (0, 1):
+        raise ValueError("thresh_mode 只能是 0(灰度直通) 或 1(二值化)，收到 %r"
+                         % (thresh_mode,))
+    if not (-128 <= thresh_offset <= 127):
+        raise ValueError("thresh_offset 必须在 [-128, 127]，收到 %r"
+                         % (thresh_offset,))
+    if gain < 0:
+        raise ValueError("gain 不能为负，收到 %r" % (gain,))
+    if roi_w <= 0 or roi_h <= 0:
+        raise ValueError("ROI 宽高必须为正，收到 %dx%d" % (roi_w, roi_h))
+
+    if roi_x is None: roi_x = (IN_WIDTH  - roi_w) // 2
+    if roi_y is None: roi_y = (IN_HEIGHT - roi_h) // 2
+
+    if roi_x < 0 or roi_y < 0 or roi_x + roi_w > IN_WIDTH or roi_y + roi_h > IN_HEIGHT:
+        raise ValueError("ROI 越界：(%d,%d) %dx%d 超出 %dx%d"
+                         % (roi_x, roi_y, roi_w, roi_h, IN_WIDTH, IN_HEIGHT))
+
+    return {'thresh_mode': thresh_mode, 'thresh_offset': thresh_offset,
+            'gain': gain,
+            'roi_x': roi_x, 'roi_y': roi_y, 'roi_w': roi_w, 'roi_h': roi_h}
 
 
 class GesturePipeline(object):
@@ -197,11 +259,22 @@ class GesturePipeline(object):
     def setup_dma(self, in_bytes=IN_BYTES, out_bytes=OUT_BYTES):
         """分配 DMA 缓冲。
 
-        ⚠ 用 pynq.allocate 而不是 numpy 数组 ——
-          allocate 出来的 buffer 是 **cache 一致的**，
-          不用手动 flush/invalidate。这是 PYNQ 相对裸机的最大便利。
-          （裸机 C 驱动里必须手动 Xil_DCacheFlushRange，
-            漏了就拿到旧数据，而且不报错。）
+        ⚠ `pynq.allocate` 出来的 buffer 是 **cache 一致**的
+          （分配时就把页标记成不可缓存），**不需要**像裸机那样
+          手动 `Xil_DCacheFlushRange` —— 这是 PYNQ 相对裸机的最大便利。
+
+        ⚠⚠ 但**不要把"cache 一致"误读成"可以不管 flush/invalidate"** ——
+          这是本文件一度写错的地方。实际情况是：
+
+            · **buffers 本身是 cache 一致的**，DMA 看到的就是内存里的值；
+            · 但 `.flush()` / `.invalidate()` 在 PYNQ 里仍是**必要的**，
+              因为 CPU 侧可能持有**已缓存的行** ——
+              `.flush()` 把 CPU 改的推下去，`.invalidate()` 把 DMA 写的拉上来。
+
+          所以：**填完输入要 `in_buf.flush()`，读完输出要 `out_buf.invalidate()`**。
+          漏刷的症状是**静默的**（ap_done 照常置位，只是数据是旧的），
+          与裸机漏刷 `Xil_DCacheFlushRange` 表现完全一样。
+          本文件现在 `run_once()` 里无条件刷输入，就是为了堵这个。
         """
         # 输入：614400 字节。pynq 的 allocate 有对齐要求，多分配一点
         self.in_buf  = allocate(shape=(in_bytes,),  dtype=np.uint8)
@@ -221,16 +294,27 @@ class GesturePipeline(object):
                gauss_en=1, sobel_en=1, morph_en=1,
                gain=DEFAULT_GAIN,
                roi_x=None, roi_y=None, roi_w=320, roi_h=320):
-        """配置预处理参数"""
-        if roi_x is None: roi_x = (IN_WIDTH  - roi_w) // 2
-        if roi_y is None: roi_y = (IN_HEIGHT - roi_h) // 2
+        """配置预处理参数
+
+        ⚠ 参数检查走 `check_config()`（纯函数，可离线测）——
+          它必须与 `sw/preproc_driver.c` 的 `preproc_config()` 对齐：
+          两个驱动要挡同样的东西，否则会出现"Python 能跑、C 跑不了"
+          （或反过来）这种最难查的不一致。
+        """
+        cfg = check_config(thresh_mode, thresh_offset, gain,
+                           roi_x, roi_y, roi_w, roi_h)
+        thresh_mode   = cfg['thresh_mode']
+        thresh_offset = cfg['thresh_offset']
+        roi_x, roi_y  = cfg['roi_x'], cfg['roi_y']
+        roi_w, roi_h  = cfg['roi_w'], cfg['roi_h']
 
         p = self.ip['preproc']
         p.write(REG_WIDTH,  IN_WIDTH)
         p.write(REG_HEIGHT, IN_HEIGHT)
         p.write(REG_THRESH_MODE,   thresh_mode)
-        # ⚠ 阈值偏置是有符号的，用 & 0xFF 转成补码写入
-        p.write(REG_THRESH_OFFSET, thresh_offset & 0xFF)
+        # ⚠⚠ 32 位补码，不是 8 位 —— 见文件头 _as_i32 的说明。
+        #    写成 `& 0xFF` 会让 -8 变成 +248，输出全黑且不报错。
+        p.write(REG_THRESH_OFFSET, _as_i32(thresh_offset))
         p.write(REG_GAUSS_EN, gauss_en)
         p.write(REG_SOBEL_EN, sobel_en)
         p.write(REG_MORPH_EN, morph_en)
@@ -240,9 +324,19 @@ class GesturePipeline(object):
         p.write(REG_ROI_W, roi_w)
         p.write(REG_ROI_H, roi_h)
 
-        print("已配置: ROI=(%d,%d) %dx%d, gain=%d, thresh_off=%d" % (
-            roi_x, roi_y, roi_w, roi_h, gain,
-            thresh_offset if thresh_offset < 128 else thresh_offset - 256))
+        # ---- 回读断言：寄存器写没写进去，别等结果不对再查 ----
+        # ⚠ 本项目在 Tcl 侧靠回读断言拦下过两次错误，这里同理。
+        got_off = p.read(REG_THRESH_OFFSET)
+        if got_off > 0x7FFFFFFF:            # 转成有符号再看
+            got_off -= 0x100000000
+        if got_off != thresh_offset:
+            raise RuntimeError(
+                "thresh_offset 回读不符：写入 %d，读回 %d\n"
+                "  （若读回的是 248 而不是 -8，说明补码位宽写错了）"
+                % (thresh_offset, got_off))
+
+        print("已配置: ROI=(%d,%d) %dx%d, gain=%d, thresh_off=%d"
+              % (roi_x, roi_y, roi_w, roi_h, gain, thresh_offset))
 
     # -----------------------------------------------------------------
     def _soft_reset_dma(self, base, sr_off, cr_off, timeout=1.0):
@@ -269,7 +363,18 @@ class GesturePipeline(object):
         dout = self.ip['dma_out']
         p    = self.ip['preproc']
 
-        # 0. 复位两个 DMA
+        # 0a. ⚠ 刷输入 buffer 的 cache。
+        #     `fill_test_pattern()` 里也刷过，这里再刷一次是**有意冗余** ——
+        #     因为它堵住一个很隐蔽的失败模式：**用别的路径填数据时忘了刷**。
+        #     （比如 `np.frombuffer(in_buf)[:] = ...`、或从 .bin 读进来。）
+        #     漏刷的症状是：**DMA 搬走的是旧数据**，而 ap_done 正常置位、
+        #     不报任何错 —— 与"输出全黑"一样属于静默失败。
+        #     刷 614 KB 约 1 ms 量级，相比一帧 20+ ms 可以忽略。
+        #     ⚠ 与 C 驱动对照：裸机侧必须显式 Xil_DCacheFlushRange，
+        #     漏了同样不报错。见 sw/preproc_driver.c。
+        self.in_buf.flush()
+
+        # 0b. 复位两个 DMA
         self._soft_reset_dma(din,  DMA_MM2S_DMASR, DMA_MM2S_DMACR)
         self._soft_reset_dma(dout, DMA_S2MM_DMASR, DMA_S2MM_DMACR)
 
