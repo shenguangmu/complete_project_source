@@ -138,3 +138,45 @@ jobs:
             echo "::error::日志里没有 '*** OVERLAY OFFLINE TESTS PASSED ***' —— 自检未真正通过"
             exit 1
           fi
+
+  # ⚠ 第四个 job：操作手册的渲染校验。
+  #   为什么"生成文档"也要进 CI：
+  #   build_manual.py 跑完会打印"已生成"，但那**不说明渲染是对的**。
+  #   渲染器最典型的失败模式是**静默丢内容** —— 某个写法没被识别，
+  #   那一段就悄悄没了。而这是要**打印出来照着做**的操作手册，
+  #   漏一行可能就是漏掉一个烧板前的检查步骤。
+  #
+  #   scripts/test_manual.py 做的就是拿源 Markdown 和生成的 docx
+  #   反向对账，看有没有内容在渲染过程中消失。
+  manual:
+    name: 操作手册渲染校验
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 安装 python-docx
+        run: pip install --quiet python-docx
+
+      - name: 解析器单测（构造用例 + 真实文档夹具）
+        run: |
+          set -o pipefail
+          python scripts/test_mdblock.py 2>&1 | tee /tmp/mdblock.log
+          if ! grep -q 'MDBLOCK TESTS PASSED' /tmp/mdblock.log; then
+            echo "::error::Markdown 解析器测试未通过"
+            exit 1
+          fi
+
+      - name: 生成手册并校验内容完整
+        run: |
+          set -o pipefail
+          python scripts/build_manual.py
+          python scripts/test_manual.py 2>&1 | tee /tmp/manual.log
+          if ! grep -q 'MANUAL TESTS PASSED' /tmp/manual.log; then
+            echo "::error::手册渲染校验未通过（可能丢了内容）"
+            exit 1
+          fi

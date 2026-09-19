@@ -255,7 +255,40 @@ ifconfig
 
 ## 4. 加载 overlay
 
-把 `gesture_system.bit` 和 `gesture_system.hwh` 传到板子上，
+### 4.0 先把两个文件弄出来（**XSA 里就有，不用重新跑**）
+
+PYNQ 要的是 **`.bit` + `.hwh` 两个文件**，它们**都在仓库里的 `gesture_system.xsa` 中** ——
+`.xsa` 本质是个 zip，直接解压即可，**不需要重跑综合**：
+
+```bash
+# 在 PC 上，仓库根目录
+cd vivado/gesture_system
+unzip -o gesture_system.xsa -d /tmp/xsa_extract
+
+# 看看里面有什么
+unzip -l gesture_system.xsa | grep -E "\.bit|\.hwh"
+#   bd_video.hwh            744,025 B
+#   gesture_system.bit    4,045,692 B     ← 与 build-report 记录的字节数一致，可据此核对
+```
+
+> ⚠ **`.hwh` 在 xsa 里叫 `bd_video.hwh`，但必须改名成 `gesture_system.hwh`** ——
+> PYNQ 靠**同名**配对找 IP 表：`gesture_system.bit` ⟷ `gesture_system.hwh`。
+> 名字不一致时 PYNQ 不会报"找不到 hwh"，而是**只认出 `default` 一个 IP**，
+> 然后你在 `ip_dict` 里一个我们的 IP 都看不到 —— 很容易误判成 overlay 有问题。
+
+```bash
+# 传到板子（改成同名同目录）
+scp gesture_system.bit  xilinx@<板子IP>:/home/xilinx/
+scp /tmp/xsa_extract/bd_video.hwh xilinx@<板子IP>:/home/xilinx/gesture_system.hwh
+```
+
+**核对拿对了没有**：
+
+| 文件 | 大小应为 | 对不上说明 |
+|---|---|---|
+| `gesture_system.bit` | **4,045,692 字节** | 不是这个数 → xsa 是旧的，重跑 `create_project.tcl` |
+| `gesture_system.hwh` | 744,025 字节 | 同上 |
+
 **两个文件必须同名同目录**（PYNQ 靠配对的 `.hwh` 解析 IP 表）。
 
 ```python
@@ -685,7 +718,7 @@ proc run_with_retry {run_name launch_args {max_attempts 3}} {
 
 ```bash
 # ---- 建工程 + 出比特流（改了 bd_video.tcl 之后必须重跑）----
-cd E:/complete_project_TCL/vivado
+cd <仓库根>/vivado
 vivado -mode batch -source create_project.tcl
 #   只看 DDR 断言过没过：
 #     >>> DDR 断言通过 (MT41K256M16 RE-125)
@@ -725,3 +758,42 @@ print(sorted(ol.ip_dict.keys()))
 | 串口卡在 `Loading kernel...` | DDR 参数不对 → §1.4 |
 | `io_xclk` 没波形 | PL 问题，**别去动摄像头** |
 | `io_pclk` 没波形但 XCLK 有 | 查寄存器表内容 / SCCB 接线 / 时序 → §1.3 |
+
+---
+
+## 10. 打印版（Word 操作手册）
+
+本文还有一份**排版好的 Word 版**，适合打印出来带到工位上：
+
+```
+docs/上板测试操作手册.docx
+```
+
+**它是从本文自动生成的，不是手工维护的第二份。**
+改了本文件之后重跑一次即可：
+
+```bash
+python scripts/build_manual.py      # 生成 docx
+python scripts/test_manual.py       # 校验没有内容在渲染中丢失
+```
+
+> ⚠ **不要直接改 Word**。Word 版是渲染产物，
+> 手工改的内容下次重新生成就没了，而且两份会开始分叉 ——
+> 这个项目已经在"双目录分叉"上吃过一次亏。
+> **要改内容就改本文件（`.md`），它是唯一事实来源。**
+
+Word 版针对打印做的处理：
+
+| 项 | 说明 |
+|---|---|
+| 版面 | A4、页边距 2cm、正文 10.5pt |
+| 分页 | **每个二级标题另起一页** —— 手上拿一张做一个阶段 |
+| 代码块 | 等宽 + 灰底 + 左边框（终端命令抄错一个字符就白跑一轮） |
+| 引用块 | 左边框高亮（本手册的"⚠ 注意"全在引用块里） |
+| 页眉页脚 | 文档名 + 第 X 页 / 共 Y 页 |
+| **手填记录表** | 万用表读数、示波器频率这类**当场要记的数**，<br>每个相关小节末尾都有一张空白表 |
+
+> ⚠ **不生成目录（TOC）**。python-docx 生成的是"域"，
+> Word 打开时要手动按 F9 更新才显示页码 ——
+> 打印前忘了更新会印出一页空白。与其埋这个坑，不如自己在 Word 里插。
+> 页脚的页码同理，打开后 Ctrl+A → F9 更新一次即可。
