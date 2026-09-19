@@ -23,9 +23,14 @@ gesture_overlay.py —— 手势识别 PL 流水线的 PYNQ 驱动
    Vivado 2025.2 不一致时，`Overlay()` 会报版本错误。
    先试不加参数的；报错再加。
 
-3. **⚠ 摄像头还没配。** `sccb_master` 的寄存器表
-   （`rtl/ov5640_regs.v`）目前是**占位表**，不会让 OV5640 出图。
-   所以本脚本的 `io_pclk` 会一直没有波形 —— 那是预期行为。
+3. **⚠ 摄像头能否出图，上板前无法确认。**
+   `sccb_master` 的寄存器表（`rtl/ov5640_regs.v`）已换成 **250 条真实配置**
+   （正点原子来源，固化为 640×480 RGB565），**结构**已由 csim/iverilog 验证过
+   （拼接顺序、表长 vs N_REGS），但**内容正确性未上板验证**。
+
+   所以：**先跑不依赖摄像头的验证**（见
+   `docs/board-bringup-guide.md` §5 的 ②③，已脚本化为 `host/bringup_check.py`），
+   把数据通路确认下来，再插摄像头。
 
 =====================================================================
   快速上手
@@ -39,7 +44,21 @@ gesture_overlay.py —— 手势识别 PL 流水线的 PYNQ 驱动
 """
 
 import time
-import numpy as np
+
+try:
+    import numpy as np
+    _NUMPY = True
+except ImportError:
+    # ⚠ numpy 软导入 —— 与下面的 pynq 同一个理由。
+    #
+    #   本模块里**与硬件无关**的那部分（`_as_i32` / `check_config` /
+    #   寄存器与 DMA 偏移常量）根本不碰数组，是纯逻辑。
+    #   把这些也绑死在 numpy 上，会让"不需要板子就能跑的自检"
+    #   凭空多一个它并不使用的依赖 —— CI 上就是这么红的。
+    #
+    #   真正用到 numpy 的地方（`get_result` / `fill_test_pattern`）
+    #   在板上跑，而 PYNQ 镜像自带 numpy，不会走到这个分支。
+    _NUMPY = False
 
 try:
     from pynq import Overlay, allocate
@@ -47,6 +66,16 @@ try:
 except ImportError:
     # 允许在 PC 上 import 本模块做静态检查（_PYNQ=False 时不加载硬件）
     _PYNQ = False
+
+
+def _need_numpy(what):
+    """用到 numpy 的功能在缺 numpy 时给出明确报错，而不是 NameError"""
+    if not _NUMPY:
+        raise RuntimeError(
+            "%s 需要 numpy，但当前环境没有。\n"
+            "  在 PYNQ 板上这不该发生（镜像自带 numpy）。\n"
+            "  在 PC 上只跑离线自检的话不需要它 —— "
+            "见 host/test_overlay_offline.py" % what)
 
 
 # =====================================================================
@@ -277,6 +306,7 @@ class GesturePipeline(object):
           本文件现在 `run_once()` 里无条件刷输入，就是为了堵这个。
         """
         # 输入：614400 字节。pynq 的 allocate 有对齐要求，多分配一点
+        _need_numpy("setup_dma()")
         self.in_buf  = allocate(shape=(in_bytes,),  dtype=np.uint8)
         self.out_buf = allocate(shape=(out_bytes,), dtype=np.uint8)
 
@@ -421,6 +451,7 @@ class GesturePipeline(object):
         """取 96x96 结果（numpy 数组）"""
         if self.out_buf is None:
             raise RuntimeError("先调 setup_dma()")
+        _need_numpy("get_result()")
         return np.array(self.out_buf, dtype=np.uint8).reshape(OUT_SIZE, OUT_SIZE)
 
     def fill_test_pattern(self):
@@ -433,6 +464,7 @@ class GesturePipeline(object):
             raise RuntimeError("先调 setup_dma()")
 
         # RGB565: 中灰 = 0x8410
+        _need_numpy("fill_test_pattern()")
         buf = np.frombuffer(self.in_buf, dtype=np.uint16)
 
         # numpy 视图：整块填中灰
