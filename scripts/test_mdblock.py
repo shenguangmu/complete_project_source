@@ -103,6 +103,23 @@ def test_blockquote_nested():
     ck(inner == ['heading', 'para', 'code'], "引用内部递归解析（实得 %s）" % inner)
 
 
+def test_terminal_badge():
+    """「在哪跑」标记必须**单独成块**。
+
+    ⚠ 这条是回归防护：它一旦被并进上一段，渲染器就认不出、画不成徽标 ——
+      而手册上"这行在 PC 还是板上跑"恰恰是最不该让人猜的信息。
+      初版就是被并进段落了（它不以任何 Markdown 记号开头）。
+    """
+    b = mdblock.parse("正文\n【终端：PC · Git Bash】\n```bash\nls\n```")
+    ck([x['type'] for x in b] == ['para', 'terminal', 'code'],
+       "标记独立成块且前后不被吞（实得 %s）" % [x['type'] for x in b])
+    ck(b[1]['text'] == '【终端：PC · Git Bash】', "标记文本完整保留")
+
+    # 它也不该拖累后一段
+    ck([x['type'] for x in mdblock.parse("【终端：PYNQ】\n后文")] == ['terminal', 'para'],
+       "标记之后另起一段")
+
+
 def test_real_document():
     """拿真实手册当夹具 —— 抓"某些写法没被识别" """
     p = Path(__file__).resolve().parent.parent / 'docs' / 'board-bringup-guide.md'
@@ -173,7 +190,7 @@ def main():
     print("=" * 69)
     for fn in (test_heading, test_hr_vs_list, test_table, test_code_fence,
                test_list_continuation, test_blockquote_nested,
-               test_real_document):
+               test_terminal_badge, test_real_document):
         print("\n[%s]" % fn.__name__)
         fn()
     print("\n" + "=" * 69)

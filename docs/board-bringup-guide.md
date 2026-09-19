@@ -14,6 +14,36 @@
 
 ---
 
+### 本文用到的四个环境（**每段代码前都标了在哪跑**）
+
+上板这件事最容易卡住的地方，不是命令本身，而是**不知道该在哪儿敲**。
+所以本文在**每段代码前面**都加了一个标记：
+
+```
+【终端：PC · Git Bash】              ← 在你的开发机上
+【终端：PYNQ · Jupyter 或串口】       ← 在板子上的 Linux 里
+【终端：串口 · MobaXterm】            ← 串口终端（看启动日志用）
+【终端：仪器 · 万用表】               ← 手持仪器，不是电脑
+```
+
+四个环境分别是：
+
+| 标记 | 是什么 | 怎么进去 |
+|---|---|---|
+| **PC · Git Bash** | 你的开发机（有 Vivado/Vitis、仓库源码） | 右键 → Git Bash Here；或用 MobaXterm 的 Local terminal |
+| **PYNQ · Jupyter** | 板子上的 Python | 浏览器开 `http://<板子IP>:9090` |
+| **PYNQ · 串口** | 板子上的命令行（和 Jupyter 是同一个 Linux） | 见 §3.1 |
+| **仪器** | 万用表 / 示波器 | 手持操作，不需要电脑 |
+
+> ⚠ **PC 和 PYNQ 上都有 Python，但装的东西完全不同**：
+> PC 上**没有 `pynq` 模块**（`import pynq` 会失败，这是正常的）；
+> PYNQ 上**没有 Vivado**。
+> 在错的那一侧跑，报错是 `ModuleNotFoundError` 或 `command not found` ——
+> 看着像环境坏了，其实只是跑错了地方。**这就是这些标记存在的理由。**
+
+
+---
+
 ## 0. 先说结论：硬件已定，只剩 1 个阻塞
 
 **摄像头选型已定：PMOD-CAMERA v1.0（MUSE LAB），直插 Pmod A + Pmod B。**
@@ -196,6 +226,8 @@ CONFIG.PCW_UIPARAM_DDR_FREQ_MHZ  {533.333}
 **【未验证】** XDC 的引脚映射是推理的，没实测过。
 
 **只用量电平和通断，不用示波器，也不需要上电**：
+【终端：仪器 · 万用表（通断档）】
+
 
 ```
 ① 万用表 → 通断档
@@ -216,6 +248,8 @@ CONFIG.PCW_UIPARAM_DDR_FREQ_MHZ  {533.333}
 ## 3. 上电与 PS 侧验证（**先不加载比特流**）
 
 ### 3.1 上电顺序
+【终端：硬件 · 断电状态下插线，最后才上电】
+
 
 ```
 ① 插好 SD 卡（PYNQ 镜像，v3.0.1）
@@ -224,8 +258,20 @@ CONFIG.PCW_UIPARAM_DDR_FREQ_MHZ  {533.333}
 ④ 最后插 12V 电源
 ```
 
-**串口终端**：Windows 下用 PuTTY / MobaXterm / `tio`。
-没串口就等于没有眼睛，**先把这个弄通再往下**。
+**串口终端选哪个** —— 推荐 **MobaXterm（家庭版，免费）**：
+
+| 工具 | 评价 |
+|---|---|
+| **MobaXterm Home Edition** ✅ **首选** | **串口 + SSH + SFTP 三合一**，而且免费、有免安装便携版。<br>本项目后面要做的三件事它一个顶三个：<br>· **串口**看 PYNQ 启动日志（`Session → Serial`，选 COM 口 + 115200）<br>· **SSH** 登板子跑命令（串口只能看，敲长命令不方便）<br>· **SFTP 拖拽**传 `.bit` / `.hwh`（省掉记 `scp` 命令） |
+| PuTTY | 够用且极小，但**只有串口/SSH，没有文件传输** ——<br>传 `.bit` 还得另找 WinSCP。只当串口终端可以 |
+| `tio` / `picocom` | Linux/macOS 上的命令行串口工具，简洁可靠。<br>本机是 Windows，用不上 |
+| 各类"串口助手"小工具 | ⚠ 只收发热门波特率的能用，但**看不到 Linux 启动全过程的滚屏**，<br>排查"卡在 Loading kernel"时很吃亏 |
+
+> ⚠ **波特率 115200 / 8 数据位 / 无校验 / 1 停止位（8N1）**，流控关掉。
+> 这是 PYNQ 镜像的默认值，改了会看到乱码。
+>
+> ⚠ **没串口就等于没有眼睛** —— PYNQ 起没起来、卡在哪一步，
+> 全看串口输出。**先把这个弄通再往下**，不要靠"板子上灯亮了"猜。
 
 ### 3.2 光一个指示灯就能砍掉一半问题
 
@@ -239,6 +285,8 @@ CONFIG.PCW_UIPARAM_DDR_FREQ_MHZ  {533.333}
 > 这一步就能验证 B4。**DDR 错了，Linux 根本起不来。**
 
 ### 3.3 进 PYNQ
+【终端：串口 · MobaXterm（或 PuTTY）· 115200 8N1】
+
 
 ```bash
 # 串口里
@@ -259,6 +307,8 @@ ifconfig
 
 PYNQ 要的是 **`.bit` + `.hwh` 两个文件**，它们**都在仓库里的 `gesture_system.xsa` 中** ——
 `.xsa` 本质是个 zip，直接解压即可，**不需要重跑综合**：
+【终端：PC · Git Bash】
+
 
 ```bash
 # 在 PC 上，仓库根目录
@@ -275,6 +325,8 @@ unzip -l gesture_system.xsa | grep -E "\.bit|\.hwh"
 > PYNQ 靠**同名**配对找 IP 表：`gesture_system.bit` ⟷ `gesture_system.hwh`。
 > 名字不一致时 PYNQ 不会报"找不到 hwh"，而是**只认出 `default` 一个 IP**，
 > 然后你在 `ip_dict` 里一个我们的 IP 都看不到 —— 很容易误判成 overlay 有问题。
+【终端：PC · Git Bash】
+
 
 ```bash
 # 传到板子（改成同名同目录）
@@ -290,6 +342,8 @@ scp /tmp/xsa_extract/bd_video.hwh xilinx@<板子IP>:/home/xilinx/gesture_system.
 | `gesture_system.hwh` | 744,025 字节 | 同上 |
 
 **两个文件必须同名同目录**（PYNQ 靠配对的 `.hwh` 解析 IP 表）。
+【终端：PYNQ · Jupyter（浏览器 :9090）或串口】
+
 
 ```python
 from pynq import Overlay
@@ -389,6 +443,8 @@ ol = Overlay("gesture_system.bit", ignore_version=True)
 ---
 
 ### 5.1 DDR 与 buffer 基本自检
+【终端：PYNQ · Jupyter 或串口】
+
 
 ```python
 from pynq import allocate
@@ -425,6 +481,8 @@ DDR(输入 640×480 RGB565) ─► dma_in(MM2S) ─► gesture_preproc ─► dm
 ⑤ 轮询 ap_done
 ⑥ invalidate cache，读结果
 ```
+【终端：PYNQ · Jupyter 或串口】
+
 
 ```python
 inbuf  = allocate(shape=(640*480,), dtype=np.uint16)   # RGB565
@@ -469,6 +527,8 @@ outbuf.invalidate()
 > ```
 
 **判定**：`outbuf` 里的值和 PC 上 golden 对得上。
+【终端：PC · Git Bash】
+
 
 ```bash
 # PC 侧
@@ -511,6 +571,8 @@ python host/dump_frame.py show board.bin --png out.png
 **前提**：§5.3 的 ⑥⑦⑧ 都通过（有 PCLK/HREF/VSYNC 和有效数据）。
 
 VDMA 是 **3 帧缓存**（`c_num_fstores=3`），地址不硬编码：
+【终端：PYNQ · Jupyter 或串口】
+
 
 ```python
 vdma = ol.vdma
@@ -525,6 +587,8 @@ vdma = ol.vdma
 ### 5.5 全链路
 
 §5.4 通过 + §5.2 通过 → 直接跑 `host/gesture_overlay.py`：
+【终端：PYNQ · Jupyter 或串口】
+
 
 ```python
 from gesture_overlay import GesturePipeline
@@ -538,6 +602,8 @@ g.show()                # Jupyter 里出图
 ```
 
 结果与 PC golden 对拍：
+【终端：PC · Git Bash】
+
 
 ```bash
 python host/dump_frame.py stats board.bin
@@ -586,6 +652,8 @@ python host/dump_frame.py compare board.bin golden.bin
 
 `create_project.tcl` 默认**删掉整个工程目录重建**。
 如果 GUI 里改过东西、不想被抹掉，加 `--keep`：
+【终端：PC · Git Bash】
+
 
 ```bash
 vivado -mode batch -source create_project.tcl -tclargs --keep
@@ -715,6 +783,8 @@ proc run_with_retry {run_name launch_args {max_attempts 3}} {
 ---
 
 ## 9. 一页速查
+【终端：PC · Git Bash】
+
 
 ```bash
 # ---- 建工程 + 出比特流（改了 bd_video.tcl 之后必须重跑）----
@@ -735,6 +805,8 @@ python host/dump_frame.py stats board.bin
 python host/dump_frame.py compare board.bin golden.bin
 python host/dump_frame.py show board.bin --side-by-side golden.bin --png cmp.png
 ```
+【终端：PYNQ · Jupyter 或串口】
+
 
 ```python
 # ---- 板上 PYNQ ----
@@ -764,6 +836,8 @@ print(sorted(ol.ip_dict.keys()))
 ## 10. 打印版（Word 操作手册）
 
 本文还有一份**排版好的 Word 版**，适合打印出来带到工位上：
+【终端：PC · Git Bash（或直接看仓库里的文件）】
+
 
 ```
 docs/上板测试操作手册.docx
@@ -771,6 +845,8 @@ docs/上板测试操作手册.docx
 
 **它是从本文自动生成的，不是手工维护的第二份。**
 改了本文件之后重跑一次即可：
+【终端：PC · Git Bash】
+
 
 ```bash
 python scripts/build_manual.py      # 生成 docx

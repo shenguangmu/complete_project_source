@@ -152,6 +152,48 @@ def add_inline(p, text, base_size=10.5, base_bold=False):
 
 
 # =====================================================================
+#  「在哪跑」标记 —— 打印手册最容易漏、也最容易让人卡住的信息
+# =====================================================================
+# ⚠ 为什么必须有：手册里写一句 `python3 host/bringup_check.py`，
+#   人不该需要自己判断这行是在 **PC 上**跑还是在 **板上**跑。
+#   猜错的代价是 `command not found` / `No module named 'pynq'`
+#   这类要查半小时的错。
+#
+# 用法：在 .md 里**单独一行**写
+#       【终端：PC · Git Bash】
+#   渲染成醒目的徽标。**纯文本里读起来也是通顺的** ——
+#   所以同一份 .md 既能渲染成 Word，也能直接在编辑器里看。
+_TERM = re.compile(r'^【终端：\s*(.+?)\s*】$')
+
+# 不同终端给不同颜色，扫一眼就能区分
+_TERM_COLOR = [
+    ('PC',      (0x1F, 0x4E, 0x79), 'DEEAF6'),   # 蓝：开发机上
+    ('PYNQ',    (0x37, 0x5A, 0x1E), 'E2EFDA'),   # 绿：板子上
+    ('串口',    (0x7F, 0x4F, 0x00), 'FFF2CC'),   # 橙：串口终端
+    ('仪器',    (0x8B, 0x1A, 0x1A), 'FCE4E4'),   # 红：万用表/示波器
+    ('Jupyter', (0x37, 0x5A, 0x1E), 'E2EFDA'),   # 绿：板上 Python
+]
+
+
+def _term_style(text):
+    for key, fg, bg in _TERM_COLOR:
+        if key in text:
+            return fg, bg
+    return (0x40, 0x40, 0x40), 'EDEDED'
+
+
+def _add_terminal_badge(doc, text):
+    """把 `【终端：...】` 渲染成一个带底色的徽标段落"""
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.space_before = Pt(5)
+    pf.space_after = Pt(3)
+    fg, bg = _term_style(text)
+    _shade(p._p.get_or_add_pPr(), bg)
+    _set_font(p.add_run('  ' + text + '  '), size=10, bold=True, color=fg)
+
+
+# =====================================================================
 #  手填表格 —— 打印手册的核心价值
 # =====================================================================
 # ⚠ 为什么按**标题锚点**插入，而不是在 .md 里写 `<!-- FILL -->` 标记：
@@ -252,6 +294,14 @@ def render(blocks, doc, first_h1_done=[False]):
                           color=(0x1F, 0x4E, 0x79))
                 p.paragraph_format.keep_with_next = True
 
+        elif t == 'terminal':
+            # ⚠ 这是**独立块类型**，不是 para 的一种。
+            #   初版把处理逻辑写在 `elif t == 'para'` 里，
+            #   结果 17 个标记一个都没匹配上、被静默丢掉 ——
+            #   是 test_manual 的"内容零丢失"检查抓到的。
+            #   又一次印证：**渲染器最危险的失败模式是不报错、只丢东西**。
+            _add_terminal_badge(doc, b['text'])
+
         elif t == 'para':
             p = doc.add_paragraph()
             p.paragraph_format.space_after = Pt(4)
@@ -329,7 +379,13 @@ def _render_quote_block(ib, doc):
     """
     t = ib['type']
 
-    if t == 'heading':
+    if t == 'terminal':
+        # ⚠ 引用块里也要认 —— 主渲染循环加了这一支还不够。
+        #   两种渲染路径都要维护，漏一边就是"某些位置的标记不显示"，
+        #   而且**不报错**。
+        _add_terminal_badge(doc, ib['text'])
+
+    elif t == 'heading':
         p = doc.add_paragraph()
         p.paragraph_format.left_indent = Cm(0.6)
         p.paragraph_format.space_before = Pt(6)

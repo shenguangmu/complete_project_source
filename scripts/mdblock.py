@@ -56,6 +56,12 @@ _OL      = re.compile(r'^(\s*)(\d+)[.)]\s+(.*)$')
 _FENCE   = re.compile(r'^(\s*)(```+|~~~+)\s*([\w+-]*)\s*$')
 _HR      = re.compile(r'^\s*([-*_])\s*\1\s*\1[-*_\s]*$')
 
+# ⚠ 本项目的「在哪跑」标记，必须**单独成块**。
+#   否则会被并进上一段（它不以任何 Markdown 记号开头），
+#   渲染器就认不出它、也就画不成徽标。
+#   这是通用的形状：**行内写法想让渲染器特殊处理，就得先能解析成独立的块**。
+_TERMINAL = re.compile(r'^【终端：\s*.+?\s*】$')
+
 
 def parse(text):
     """把 Markdown 文本切成块列表。
@@ -122,6 +128,12 @@ def parse(text):
             blocks.append(Block(type='quote', blocks=parse('\n'.join(qlines))))
             continue
 
+        # ---- 「在哪跑」标记（必须单独成块，见 _TERMINAL 的说明）----
+        if _TERMINAL.match(line.strip()):
+            blocks.append(Block(type='terminal', text=line.strip()))
+            i += 1
+            continue
+
         # ---- 表格 ----
         if (line.strip().startswith('|') and i + 1 < n
                 and _is_table_sep(lines[i + 1])):
@@ -184,7 +196,8 @@ def parse(text):
                and not lines[i].strip().startswith('|')
                and not _UL.match(lines[i])
                and not _OL.match(lines[i])
-               and not _HR.match(lines[i])):
+               and not _HR.match(lines[i])
+               and not _TERMINAL.match(lines[i].strip())):
             para.append(lines[i].strip())
             i += 1
         blocks.append(Block(type='para', text=' '.join(para)))
@@ -210,5 +223,10 @@ def iter_text(blocks):
             yield ('heading', b['text'])
         elif b['type'] == 'para':
             yield ('para', b['text'])
+        elif b['type'] == 'terminal':
+            # ⚠ 别漏了这一支：iter_text 是测试用来对账"有没有内容丢失"的，
+            #   漏掉一种块类型，就会把它的内容**误报成丢失**。
+            #   （加 terminal 块时就忘了加这里，两个测试同时红了。）
+            yield ('terminal', b['text'])
         else:
             yield (b['type'], '')
